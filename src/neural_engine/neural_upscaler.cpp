@@ -19,7 +19,15 @@ bool NeuralUpscaler::Initialize(const std::string& hlslPath, const std::string& 
     }
 
     if (!modelPath.empty()) {
-        if (modelLoader_.Load(modelPath, expectedSha)) {
+        bool loaded = modelLoader_.Load(modelPath, expectedSha);
+        if (!loaded) {
+            loaded = modelLoader_.Load("build/Release/" + modelPath, expectedSha);
+        }
+        if (!loaded) {
+            loaded = modelLoader_.Load("weights/model.safetensors", expectedSha);
+        }
+
+        if (loaded) {
             size_t totalModelTensors = modelLoader_.tensors().size();
             std::cout << "[NeuralUpscaler] Loaded model from: " << modelPath << " ("
                       << totalModelTensors << " neural tensors)" << std::endl;
@@ -41,26 +49,26 @@ bool NeuralUpscaler::Initialize(const std::string& hlslPath, const std::string& 
                 return false;
             };
 
-            // 1. Primary Transformer & Convolutional Layers
-            appendTensor("layer0.conv",   4096, 0);
-            appendTensor("layer0.weight", 4096, 1);
-            appendTensor("layer1.weight", 4096, 2);
-            appendTensor("layer2.qkv",   16384, 3);
-            appendTensor("layer2.attn",   8192, 4);
-            appendTensor("layer3.attn",   8192, 5);
-            appendTensor("layer3.proj",   8192, 6);
-            appendTensor("layer4.weight", 4096, 7);
-            appendTensor("layer4.attn",   8192, 8);
-            appendTensor("layer4.proj",   8192, 9);
+            // 1. Primary Transformer & Convolutional Layers (Expanded for 4-Head W-MSA)
+            appendTensor("layer0.conv",   8192, 0);
+            appendTensor("layer0.weight", 8192, 1);
+            appendTensor("layer1.weight", 8192, 2);
+            appendTensor("layer2.qkv",   32768, 3);
+            appendTensor("layer2.attn",  16384, 4);
+            appendTensor("layer3.attn",  16384, 5);
+            appendTensor("layer3.proj",  16384, 6);
+            appendTensor("layer4.weight", 8192, 7);
+            appendTensor("layer4.attn",  16384, 8);
+            appendTensor("layer4.proj",  16384, 9);
 
-            // 2. Deep Cascade Stages (open_nr_layer_010 through open_nr_layer_041)
+            // 2. Deep Cascade Stages (open_nr_layer_010 through open_nr_layer_073 -> 64 layers)
             size_t cascadeStart = packedWeights.size();
             packedWeights[10] = static_cast<float>(cascadeStart);
             size_t cascadeLayersLoaded = 0;
             constexpr size_t CASCADE_STRIDE = 1024;
             packedWeights[12] = static_cast<float>(CASCADE_STRIDE);
 
-            for (int i = 10; i <= 41; ++i) {
+            for (int i = 10; i <= 73; ++i) {
                 char layerName[64];
                 snprintf(layerName, sizeof(layerName), "open_nr_layer_%03d.weight", i);
                 std::vector<float> layerData;

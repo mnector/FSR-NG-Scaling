@@ -8,6 +8,7 @@
 
 #include "capture/capture_manager.h"
 #include "neural_engine/neural_upscaler.h"
+#include "neural_engine/ngx_interop.h"
 #include "display/overlay_window.h"
 #include "display/swapchain_presenter.h"
 #include "utils/config_reader.h"
@@ -43,6 +44,8 @@ int main(int argc, char* argv[]) {
     float toneIntensity      = config.GetFloat("tone_intensity", 0.10f);
     float splitScreen        = config.GetFloat("debug_split_screen", 0.0f);
     float temporalStability  = config.GetFloat("temporal_stability", 0.85f);
+    float detailBoost        = config.GetFloat("detail_boost", 1.35f);
+    float catmullRom         = config.GetFloat("catmull_rom", 1.0f);
     int   scaleFactor        = config.GetInt("scale_factor", 2);
     int   toggleKey          = config.GetInt("toggle_key", 83); // 'S'
     int   reloadKey          = config.GetInt("reload_key", 82); // 'R'
@@ -56,6 +59,8 @@ int main(int argc, char* argv[]) {
     std::cout << "[Config] Structure Sharpening: " << structureIntensity << "\n";
     std::cout << "[Config] Tone Intensity: " << toneIntensity << "\n";
     std::cout << "[Config] Temporal Stability: " << temporalStability << "\n";
+    std::cout << "[Config] Detail Boost (DLSS 5 OpenNR): " << detailBoost << "\n";
+    std::cout << "[Config] Catmull-Rom 9-Tap Filter: " << (catmullRom > 0.5f ? "ON" : "OFF") << "\n";
     std::cout << "[Config] Initial Capture Mode: " << captureMode << "\n";
     std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "\n";
 
@@ -71,6 +76,10 @@ int main(int argc, char* argv[]) {
     ID3D12Device* device = upscaler.engine().device();
     ID3D12CommandQueue* computeQueue = upscaler.engine().queue();
     ID3D12CommandQueue* directQueue  = upscaler.engine().directQueue();
+
+    // 2.1 Probe NVIDIA NGX DLSS-NR dynamic library & fallback gracefully to OpenNR SafeTensors
+    NgxInterop ngx;
+    ngx.ProbeAndInitialize(device);
 
     // 3. Command Allocator and List for Compute Dispatches
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> computeAlloc;
@@ -141,6 +150,8 @@ int main(int argc, char* argv[]) {
     upscaler.params.toneIntensity = toneIntensity;
     upscaler.params.splitScreen = splitScreen;
     upscaler.params.temporalStability = temporalStability;
+    upscaler.params.detailBoost = detailBoost;
+    upscaler.params.catmullRom = catmullRom;
     upscaler.params.resetHistory = 1.0f;
 
     // 7. Register Global Hotkeys
@@ -178,6 +189,8 @@ int main(int argc, char* argv[]) {
         upscaler.params.toneIntensity      = config.GetFloat("tone_intensity", 0.10f);
         upscaler.params.splitScreen        = config.GetFloat("debug_split_screen", 0.0f);
         upscaler.params.temporalStability  = config.GetFloat("temporal_stability", 0.85f);
+        upscaler.params.detailBoost        = config.GetFloat("detail_boost", 1.35f);
+        upscaler.params.catmullRom         = config.GetFloat("catmull_rom", 1.0f);
         std::string newMode = config.GetString("capture_mode", "window");
         windowModeActive = (newMode == "window");
         upscaler.ResetHistory();
@@ -186,6 +199,8 @@ int main(int argc, char* argv[]) {
                   << " Structure=" << upscaler.params.structureIntensity
                   << " Tone=" << upscaler.params.toneIntensity
                   << " Temporal=" << upscaler.params.temporalStability
+                  << " DetailBoost=" << upscaler.params.detailBoost
+                  << " CatmullRom=" << (upscaler.params.catmullRom > 0.5f ? "ON" : "OFF")
                   << " Mode=" << (windowModeActive.load() ? "Window" : "Desktop")
                   << " SplitScreen=" << upscaler.params.splitScreen << std::endl;
     });
@@ -276,7 +291,8 @@ int main(int argc, char* argv[]) {
                       << " | Mode: " << (upscaler.params.modeWindow > 0.5f ? "WINDOW" : "DESKTOP")
                       << " | Out: " << upscaler.outWidth() << "x" << upscaler.outHeight()
                       << " | Temporal: " << upscaler.params.temporalStability
-                      << " | Intensity: " << upscaler.params.intensity
+                      << " | DetailBoost: " << upscaler.params.detailBoost
+                      << " | CatmullRom: " << (upscaler.params.catmullRom > 0.5f ? "ON" : "OFF")
                       << " | Split: " << (upscaler.params.splitScreen > 0.5f ? "ON" : "OFF")
                       << std::flush;
         }

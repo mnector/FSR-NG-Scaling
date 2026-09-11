@@ -22,7 +22,7 @@ struct float4 {
 };
 
 // Parameters uploaded to the compute shader each frame.
-// 16-byte aligned matching cbuffer Params in neural_scale_cs.hlsl (64 bytes total).
+// 16-byte aligned matching cbuffer Params in neural_scale_cs.hlsl (80 bytes total).
 struct alignas(16) ScaleParams {
     float2 inSize;              // offset 0 (8 bytes)
     float2 outSize;             // offset 8 (8 bytes)
@@ -35,6 +35,9 @@ struct alignas(16) ScaleParams {
     float  resetHistory = 0.0f;        // offset 40 (4 bytes)
     float  modeWindow = 0.0f;          // offset 44 (4 bytes)
     float4 captureCrop{ 0.0f, 0.0f, 1.0f, 1.0f }; // offset 48 (16 bytes)
+    float  detailBoost = 1.35f;        // offset 64 (4 bytes)
+    float  catmullRom = 1.0f;          // offset 68 (4 bytes)
+    float2 pad{};                      // offset 72 (8 bytes)
 };
 
 class D3D12ComputeEngine {

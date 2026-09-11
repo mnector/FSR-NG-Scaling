@@ -165,6 +165,14 @@ bool CaptureManager::SetupDuplication() {
     }
 
     duplication_.Reset();
+
+    // Ensure thread is attached to the active interactive input desktop
+    HDESK hInputDesk = OpenInputDesktop(0, FALSE, GENERIC_ALL);
+    if (hInputDesk) {
+        SetThreadDesktop(hInputDesk);
+        CloseDesktop(hInputDesk);
+    }
+
     hr = dxgiOutput1->DuplicateOutput(d3d11Device_.Get(), duplication_.GetAddressOf());
     if (FAILED(hr)) {
         error_ = "DuplicateOutput failed with HRESULT: " + std::to_string(hr);

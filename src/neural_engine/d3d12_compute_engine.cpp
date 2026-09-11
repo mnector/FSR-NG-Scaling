@@ -70,9 +70,10 @@ bool D3D12ComputeEngine::Initialize(int adapterIndex) {
     // Descriptor heap for:
     // Slot 0: Input SRV (t0)
     // Slot 1: Weights SRV (t1)
-    // Slot 2: Output UAV (u0)
+    // Slot 2: History SRV (t2)
+    // Slot 3: Output UAV (u0)
     D3D12_DESCRIPTOR_HEAP_DESC heapDesc{};
-    heapDesc.NumDescriptors = 3;
+    heapDesc.NumDescriptors = 4;
     heapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     heapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     hr = device_->CreateDescriptorHeap(&heapDesc, IID_PPV_ARGS(heap_.GetAddressOf()));
@@ -186,12 +187,12 @@ bool D3D12ComputeEngine::CompileShader(const std::string& hlslPath) {
     }
 
     // Root Signature Layout:
-    // Param 0: Descriptor Table with SRV range (t0 and t1, count 2)
+    // Param 0: Descriptor Table with SRV range (t0, t1, t2, count 3)
     // Param 1: Descriptor Table with UAV range (u0, count 1)
     // Param 2: 32-bit Constants (b0, sizeof(ScaleParams)/4)
     D3D12_DESCRIPTOR_RANGE srvRange{};
     srvRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-    srvRange.NumDescriptors = 2; // t0 (Input Texture) + t1 (Weights Buffer)
+    srvRange.NumDescriptors = 3; // t0 (Input Texture) + t1 (Weights Buffer) + t2 (History Texture)
     srvRange.BaseShaderRegister = 0;
     srvRange.RegisterSpace = 0;
     srvRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
@@ -205,7 +206,7 @@ bool D3D12ComputeEngine::CompileShader(const std::string& hlslPath) {
 
     D3D12_ROOT_PARAMETER rootParams[3]{};
 
-    // [0] SRV Table (t0, t1)
+    // [0] SRV Table (t0, t1, t2)
     rootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
     rootParams[0].DescriptorTable.NumDescriptorRanges = 1;
     rootParams[0].DescriptorTable.pDescriptorRanges = &srvRange;
@@ -262,7 +263,7 @@ bool D3D12ComputeEngine::CompileShader(const std::string& hlslPath) {
     return true;
 }
 
-bool D3D12ComputeEngine::BindDescriptors(ID3D12Resource* input, ID3D12Resource* output) {
+bool D3D12ComputeEngine::BindDescriptors(ID3D12Resource* input, ID3D12Resource* history, ID3D12Resource* output) {
     if (!device_ || !heap_ || !input || !output) return false;
 
     D3D12_CPU_DESCRIPTOR_HANDLE cpuHandle = heap_->GetCPUDescriptorHandleForHeapStart();
@@ -295,7 +296,19 @@ bool D3D12ComputeEngine::BindDescriptors(ID3D12Resource* input, ID3D12Resource* 
         device_->CreateShaderResourceView(nullptr, &weightsSrvDesc, cpuHandle);
     }
 
-    // Slot 2: UAV for output texture (u0)
+    // Slot 2: SRV for previous frame history (t2)
+    cpuHandle.ptr += descriptorSize_;
+    D3D12_SHADER_RESOURCE_VIEW_DESC histSrvDesc{};
+    histSrvDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    histSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    histSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    histSrvDesc.Texture2D.MostDetailedMip = 0;
+    histSrvDesc.Texture2D.MipLevels = 1;
+    histSrvDesc.Texture2D.PlaneSlice = 0;
+    histSrvDesc.Texture2D.ResourceMinLODClamp = 0.0f;
+    device_->CreateShaderResourceView(history ? history : input, &histSrvDesc, cpuHandle);
+
+    // Slot 3: UAV for output texture (u0)
     cpuHandle.ptr += descriptorSize_;
     D3D12_UNORDERED_ACCESS_VIEW_DESC uavDesc{};
     uavDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -309,11 +322,12 @@ bool D3D12ComputeEngine::BindDescriptors(ID3D12Resource* input, ID3D12Resource* 
 
 void D3D12ComputeEngine::Upscale(ID3D12GraphicsCommandList* cmd,
                                  ID3D12Resource* input,
+                                 ID3D12Resource* history,
                                  ID3D12Resource* output,
                                  const ScaleParams& params) {
     if (!initialized_ || !cmd || !input || !output) return;
 
-    if (!BindDescriptors(input, output)) return;
+    if (!BindDescriptors(input, history, output)) return;
 
     ID3D12DescriptorHeap* heaps[] = { heap_.Get() };
     cmd->SetDescriptorHeaps(1, heaps);
@@ -322,9 +336,9 @@ void D3D12ComputeEngine::Upscale(ID3D12GraphicsCommandList* cmd,
     cmd->SetPipelineState(pso_.Get());
 
     D3D12_GPU_DESCRIPTOR_HANDLE gpuHandle = heap_->GetGPUDescriptorHandleForHeapStart();
-    cmd->SetComputeRootDescriptorTable(0, gpuHandle); // t0, t1
+    cmd->SetComputeRootDescriptorTable(0, gpuHandle); // t0, t1, t2
 
-    gpuHandle.ptr += (descriptorSize_ * 2);
+    gpuHandle.ptr += (descriptorSize_ * 3);
     cmd->SetComputeRootDescriptorTable(1, gpuHandle); // u0
 
     ScaleParams p = params;

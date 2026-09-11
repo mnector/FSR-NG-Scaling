@@ -142,8 +142,11 @@ static bool JsonGet(const std::string& json, const std::string& key, std::string
 bool SafetensorsLoader::ParseHeader(const std::string& json) {
     tensors_.clear();
 
-    // Find the "__metadata__" block (optional) and the per-tensor blocks.
     size_t pos = 0;
+    size_t outer = json.find('{');
+    if (outer == std::string::npos) return false;
+    pos = outer + 1;
+
     while (pos < json.size()) {
         size_t nameStart = json.find('"', pos);
         if (nameStart == std::string::npos) break;
@@ -152,55 +155,58 @@ bool SafetensorsLoader::ParseHeader(const std::string& json) {
         std::string name = json.substr(nameStart + 1, nameEnd - nameStart - 1);
         pos = nameEnd + 1;
 
-        // Skip "__metadata__" meta block.
-        if (name == "__metadata__") {
-            size_t brace = json.find('{', pos);
-            if (brace == std::string::npos) break;
-            int depth = 0;
-            for (; pos < json.size(); ++pos) {
-                if (json[pos] == '{') ++depth;
-                else if (json[pos] == '}') { --depth; if (depth == 0) { ++pos; break; } }
-            }
-            continue;
-        }
-
-        // Expect ':' then '{' shape/dtype/offset/data_offsets.
         size_t colon = json.find(':', pos);
         if (colon == std::string::npos) break;
         size_t brace = json.find('{', colon);
         if (brace == std::string::npos) break;
 
-        TensorMeta meta;
-        std::string dtype, offsets;
-        if (JsonGet(json.substr(brace), "dtype", dtype)) meta.dtype = dtype;
-        if (JsonGet(json.substr(brace), "data_offsets", offsets)) {
-            // offsets is like "[start, end]"
-            size_t c1 = offsets.find(',');
-            if (c1 != std::string::npos) {
-                try {
-                    meta.offset  = std::stoull(TrimStr(offsets.substr(0, c1)));
-                    meta.byteLen = std::stoull(TrimStr(offsets.substr(c1 + 1))) - meta.offset;
-                } catch (...) {}
-            }
-        }
-
-        // Parse shape array.
-        std::string shape;
-        if (JsonGet(json.substr(brace), "shape", shape)) {
-            size_t s = shape.find('[');
-            size_t e = shape.find(']');
-            if (s != std::string::npos && e != std::string::npos) {
-                std::stringstream ss(shape.substr(s + 1, e - s - 1));
-                std::string tok;
-                while (std::getline(ss, tok, ',')) {
-                    tok = TrimStr(tok);
-                    if (!tok.empty()) meta.shape.push_back(std::stoull(tok));
+        // Find matching closing brace
+        int depth = 0;
+        size_t endBrace = brace;
+        for (; endBrace < json.size(); ++endBrace) {
+            if (json[endBrace] == '{') ++depth;
+            else if (json[endBrace] == '}') {
+                --depth;
+                if (depth == 0) {
+                    ++endBrace;
+                    break;
                 }
             }
         }
 
-        tensors_[name] = meta;
-        pos = brace; // continue scanning after this block
+        if (name != "__metadata__") {
+            std::string block = json.substr(brace, endBrace - brace);
+            TensorMeta meta;
+            std::string dtype, offsets;
+            if (JsonGet(block, "dtype", dtype)) meta.dtype = dtype;
+            if (JsonGet(block, "data_offsets", offsets)) {
+                size_t c1 = offsets.find(',');
+                if (c1 != std::string::npos) {
+                    try {
+                        meta.offset  = std::stoull(TrimStr(offsets.substr(0, c1)));
+                        meta.byteLen = std::stoull(TrimStr(offsets.substr(c1 + 1))) - meta.offset;
+                    } catch (...) {}
+                }
+            }
+
+            std::string shape;
+            if (JsonGet(block, "shape", shape)) {
+                size_t s = shape.find('[');
+                size_t e = shape.find(']');
+                if (s != std::string::npos && e != std::string::npos) {
+                    std::stringstream ss(shape.substr(s + 1, e - s - 1));
+                    std::string tok;
+                    while (std::getline(ss, tok, ',')) {
+                        tok = TrimStr(tok);
+                        if (!tok.empty()) meta.shape.push_back(std::stoull(tok));
+                    }
+                }
+            }
+
+            tensors_[name] = meta;
+        }
+
+        pos = endBrace;
     }
     return !tensors_.empty();
 }
@@ -240,6 +246,7 @@ bool SafetensorsLoader::Load(const std::string& path, const std::string& expecte
         lastError_ = "invalid header length";
         return false;
     }
+    headerLen_ = headerLen;
 
     std::string json(reinterpret_cast<const char*>(raw_.data() + 8), headerLen);
     if (!ParseHeader(json)) { lastError_ = "failed to parse JSON header"; return false; }
@@ -251,9 +258,53 @@ bool SafetensorsLoader::Load(const std::string& path, const std::string& expecte
 const uint8_t* SafetensorsLoader::GetData(const std::string& name) {
     auto it = tensors_.find(name);
     if (it == tensors_.end()) return nullptr;
-    size_t absOff = 8 + it->second.offset;
+    size_t absOff = 8 + headerLen_ + it->second.offset;
     if (absOff >= raw_.size() || absOff + it->second.byteLen > raw_.size()) return nullptr;
     return raw_.data() + absOff;
+}
+
+void SafetensorsLoader::ConvertF16ToF32(const uint16_t* in, float* out, size_t count) {
+    if (!in || !out || count == 0) return;
+    for (size_t i = 0; i < count; ++i) {
+        uint16_t h = in[i];
+        uint32_t sign = (h >> 15) & 0x0001;
+        uint32_t exp  = (h >> 10) & 0x001f;
+        uint32_t mant = h & 0x03ff;
+        if (exp == 0) {
+            out[i] = (sign ? -0.0f : 0.0f);
+        } else if (exp == 31) {
+            out[i] = (sign ? -1.0f : 1.0f);
+        } else {
+            uint32_t fExp = exp + (127 - 15);
+            uint32_t fMant = mant << 13;
+            uint32_t fBits = (sign << 31) | (fExp << 23) | fMant;
+            float val = 0.0f;
+            std::memcpy(&val, &fBits, sizeof(float));
+            out[i] = val;
+        }
+    }
+}
+
+bool SafetensorsLoader::GetTensorF32(const std::string& name, std::vector<float>& out, size_t maxElements) {
+    auto it = tensors_.find(name);
+    if (it == tensors_.end()) return false;
+    const uint8_t* raw = GetData(name);
+    if (!raw) return false;
+
+    if (it->second.dtype == "F16") {
+        size_t numElements = it->second.byteLen / 2;
+        if (maxElements > 0 && numElements > maxElements) numElements = maxElements;
+        out.resize(numElements);
+        ConvertF16ToF32(reinterpret_cast<const uint16_t*>(raw), out.data(), numElements);
+        return true;
+    } else if (it->second.dtype == "F32") {
+        size_t numElements = it->second.byteLen / 4;
+        if (maxElements > 0 && numElements > maxElements) numElements = maxElements;
+        out.resize(numElements);
+        std::memcpy(out.data(), raw, numElements * sizeof(float));
+        return true;
+    }
+    return false;
 }
 
 } // namespace fsrng

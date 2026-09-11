@@ -42,8 +42,17 @@ public:
     // Returns a pointer into the loaded buffer for the named tensor, or nullptr.
     const uint8_t* GetData(const std::string& name);
 
+    // Extracts tensor data converted to FP32. Handles F16 and F32 source dtypes.
+    bool GetTensorF32(const std::string& name, std::vector<float>& out, size_t maxElements = 0);
+
+    // Fast half-to-single precision conversion
+    static void ConvertF16ToF32(const uint16_t* in, float* out, size_t count);
+
+    uint64_t headerLength() const { return headerLen_; }
+
 private:
     bool loaded_ = false;
+    uint64_t headerLen_ = 0;
     std::string lastError_;
     std::vector<uint8_t> raw_;
     std::map<std::string, TensorMeta> tensors_;

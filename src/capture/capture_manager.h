@@ -13,6 +13,16 @@ struct ID3D11Query;
 
 namespace fsrng {
 
+struct WindowClientInfo {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+    bool valid = false;
+    HWND hwnd = nullptr;
+    std::string title;
+};
+
 class CaptureManager {
 public:
     CaptureManager();
@@ -29,6 +39,9 @@ public:
 
     // Acquire the latest available frame as a D3D12 resource
     ID3D12Resource* AcquireLatestFrame();
+
+    // Query active foreground window client rect in screen coordinates (excluding titlebar/borders)
+    WindowClientInfo GetForegroundClientArea(HWND excludeHwnd = nullptr);
 
     bool active() const { return active_; }
     uint32_t width() const { return width_; }

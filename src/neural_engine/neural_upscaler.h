@@ -21,7 +21,10 @@ public:
     // Run upscale compute shader on the provided command list
     void Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inputResource);
 
+    void ResetHistory() { params.resetHistory = 1.0f; }
+
     ID3D12Resource* output() const { return outputResource_.Get(); }
+    ID3D12Resource* history() const { return historyResource_.Get(); }
     int outWidth() const { return outW_; }
     int outHeight() const { return outH_; }
 
@@ -37,6 +40,7 @@ private:
     D3D12ComputeEngine engine_;
     SafetensorsLoader  modelLoader_;
     Microsoft::WRL::ComPtr<ID3D12Resource> outputResource_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> historyResource_;
 
     int inW_ = 0;
     int inH_ = 0;

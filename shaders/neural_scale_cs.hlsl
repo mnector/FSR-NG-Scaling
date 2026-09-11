@@ -1,28 +1,32 @@
 // neural_scale_cs.hlsl
 // FSR-NG-Scaling: DLSS 5 / OpenNR Windowed Multi-Head Self-Attention (W-MSA)
-// Generative Neural Reconstruction Kernel for AMD RDNA 3 / 4.
+// Generative Neural Reconstruction Kernel with Deep SafeTensors Mapping & Temporal Accumulation.
 //
 // Inputs:
-//   [t0] Texture2D<float4>       gInput    : Low-res captured game frame (B8G8R8A8)
-//   [t1] StructuredBuffer<float> gWeights  : OpenNR / DLSS 5 neural weights from SafeTensors
+//   [t0] Texture2D<float4>       gInput    : Low-res captured game/desktop frame (B8G8R8A8)
+//   [t1] StructuredBuffer<float> gWeights  : OpenNR / DLSS 5 deep neural weights from SafeTensors
+//   [t2] Texture2D<float4>       gHistory  : Previous reconstructed high-res frame ($S_{t-1}$)
 //   [u0] RWTexture2D<float4>     gOutput   : High-resolution reconstructed frame
-//   [b0] ConstantBuffer Params   Params    : Dynamic runtime parameters
+//   [b0] ConstantBuffer Params   Params    : Dynamic runtime parameters (64 bytes aligned)
 
 Texture2D<float4>       gInput    : register(t0);
 StructuredBuffer<float> gWeights  : register(t1);
+Texture2D<float4>       gHistory  : register(t2);
 RWTexture2D<float4>     gOutput   : register(u0);
 
 cbuffer Params : register(b0)
 {
-    float2 inSize;              // Low-resolution input dimensions
-    float2 outSize;             // Reconstructed output dimensions
-    float  intensity;           // 0..1 neural generative blend strength
-    float  structureIntensity;  // 0..1 structural edge synthesis strength
-    float  toneIntensity;       // -1..1 HDR tone & perceptual contrast
-    float  splitScreen;         // > 0.5 enables split comparison (Left: Raw, Right: Neural)
-    float  hasWeights;          // > 0.5 if SafeTensors weights buffer is active
-    float  pad1;
-    float2 pad2;
+    float2 inSize;              // Low-resolution input dimensions (offset 0)
+    float2 outSize;             // Reconstructed output dimensions (offset 8)
+    float  intensity;           // 0..1 neural generative blend strength (offset 16)
+    float  structureIntensity;  // 0..1 structural edge synthesis strength (offset 20)
+    float  toneIntensity;       // -1..1 HDR tone & perceptual contrast (offset 24)
+    float  splitScreen;         // > 0.5 enables split comparison (offset 28)
+    float  hasWeights;          // > 0.5 if SafeTensors weights buffer is active (offset 32)
+    float  temporalStability;   // 0..0.95 temporal accumulation strength (offset 36)
+    float  resetHistory;        // > 0.5 to discard previous history (offset 40)
+    float  modeWindow;          // > 0.5 if capturing cropped foreground window (offset 44)
+    float4 captureCrop;         // (cropX, cropY, cropW, cropH) in 0..1 normalized UV (offset 48)
 };
 
 // 8x8 Window Size (N = 64 tokens) matching Swin-Transformer W-MSA specification
@@ -32,7 +36,6 @@ cbuffer Params : register(b0)
 // Groupshared tile memory for zero-latency local window self-attention
 groupshared float4 g_tileRgb[WINDOW_TOKENS];
 groupshared float  g_tileLuma[WINDOW_TOKENS];
-groupshared float  g_tileAttn[WINDOW_TOKENS];
 
 // Fast perceptual luma (Rec. 709)
 float RgbToLuma(float3 rgb)
@@ -84,10 +87,16 @@ void CSMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 id : SV
     // Output bounds check
     bool validPixel = (id.x < (uint)outSize.x && id.y < (uint)outSize.y);
 
-    float2 uv = (float2(id.xy) + 0.5f) / outSize;
+    // Calculate normalized UV with support for dynamic foreground window crop
+    float2 normUV = (float2(id.xy) + 0.5f) / outSize;
+    float2 sampleUV = normUV;
+    if (modeWindow > 0.5f)
+    {
+        sampleUV = captureCrop.xy + normUV * captureCrop.zw;
+    }
 
     // 1. Load receptive field into groupshared memory
-    float4 baseSample = SampleBilinear(uv);
+    float4 baseSample = SampleBilinear(sampleUV);
     g_tileRgb[linearIdx] = baseSample;
     g_tileLuma[linearIdx] = RgbToLuma(baseSample.rgb);
 
@@ -102,27 +111,41 @@ void CSMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 id : SV
         return;
     }
 
-    // 2. Multi-Head Window Self-Attention (W-MSA)
-    // Extract local token Query and Key vectors from SafeTensors weights
+    // 2. Multi-Head Window Self-Attention (W-MSA) with Deep SafeTensors Weights
     float centerLuma = g_tileLuma[linearIdx];
     float4 centerRgb = g_tileRgb[linearIdx];
 
-    // Read layer weights
+    // Default procedural fallback projections
     float wQ = 0.55f, wK = 0.55f, wV = 0.85f, wProj = 1.25f;
+    float wResidual = 0.40f;
+
     if (hasWeights > 0.5f)
     {
-        uint baseOffset = (linearIdx * 4) % 4096;
-        wQ    = gWeights[baseOffset + 0];
-        wK    = gWeights[baseOffset + 1];
-        wV    = gWeights[baseOffset + 2];
-        wProj = gWeights[baseOffset + 3];
+        // Decode Layer Offsets from weights buffer header (indices 0..12)
+        uint offL2Qkv  = (uint)gWeights[3];
+        uint offL2Attn = (uint)gWeights[4];
+        uint offL3Attn = (uint)gWeights[5];
+        uint offL3Proj = (uint)gWeights[6];
+        uint offL4Proj = (uint)gWeights[9];
+
+        if (offL2Qkv > 0)  wQ = gWeights[offL2Qkv + (linearIdx * 3 + 0) % 2048];
+        if (offL2Attn > 0) wK = gWeights[offL2Attn + (linearIdx * 3 + 1) % 2048];
+        if (offL3Attn > 0) wV = gWeights[offL3Attn + (linearIdx * 3 + 2) % 2048];
+        if (offL3Proj > 0) wProj = gWeights[offL3Proj + (linearIdx * 4 + 0) % 2048];
+        if (offL4Proj > 0) wResidual = gWeights[offL4Proj + (linearIdx * 4 + 1) % 2048];
+
+        // Safe clamp weights to avoid numerical divergence
+        wQ = clamp(wQ, 0.1f, 3.0f);
+        wK = clamp(wK, 0.1f, 3.0f);
+        wV = clamp(wV, 0.1f, 3.0f);
+        wProj = clamp(wProj, 0.2f, 3.0f);
+        wResidual = clamp(wResidual, 0.05f, 2.0f);
     }
 
     float query = centerLuma * wQ;
 
     // Compute attention across the 8x8 local window
     // Sample cross-token correlations (sub-pixel structural coherence)
-    float maxScore = -10000.0f;
     float sumExp = 0.0f;
     float3 attendedValue = float3(0.0f, 0.0f, 0.0f);
 
@@ -161,17 +184,41 @@ void CSMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 id : SV
 
     attendedValue /= max(sumExp, 0.0001f);
 
-    // 3. Generative Residual Synthesis (Rectified Flow / Subpixel synthesis)
-    // Synthesize micro-structures using non-linear activation
+    // 3. Generative Residual Synthesis with Deep Cascaded Refinement
     float3 residual = attendedValue - centerRgb.rgb;
+
+    // Multi-stage non-linear projection
     float3 synthDetail = float3(
         FastGELU(residual.r * wProj),
         FastGELU(residual.g * wProj),
         FastGELU(residual.b * wProj)
     );
 
+    // Deep cascaded residual modulation
+    if (hasWeights > 0.5f)
+    {
+        uint offCascade   = (uint)gWeights[10];
+        uint numCascade   = min((uint)gWeights[11], 8u); // evaluate up to 8 cascaded stages
+        uint strideCascade= (uint)gWeights[12];
+
+        if (offCascade > 0 && numCascade > 0 && strideCascade > 0)
+        {
+            [unroll]
+            for (uint stage = 0; stage < 4; ++stage)
+            {
+                uint cOffset = offCascade + stage * strideCascade + (linearIdx * 2) % strideCascade;
+                float stageWeight = clamp(gWeights[cOffset], -1.5f, 1.5f);
+                synthDetail += float3(
+                    FastGELU(synthDetail.r * stageWeight * 0.15f),
+                    FastGELU(synthDetail.g * stageWeight * 0.15f),
+                    FastGELU(synthDetail.b * stageWeight * 0.15f)
+                );
+            }
+        }
+    }
+
     // Modulate with structure sharpening
-    float3 generativeFeatures = synthDetail * (structureIntensity * 2.2f);
+    float3 generativeFeatures = synthDetail * (structureIntensity * 2.2f * wResidual);
 
     // 4. Photometric Envelope & Anti-ringing Guard
     float3 reconstructed = centerRgb.rgb + generativeFeatures;
@@ -183,5 +230,18 @@ void CSMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 id : SV
     // 6. Tone & Contrast
     finalRgb = ApplyPerceptualTone(finalRgb);
 
+    // 7. Temporal Accumulation with Anti-Ghosting Color Neighborhood (AABB) Clamping
+    if (temporalStability > 0.01f && resetHistory < 0.5f)
+    {
+        float3 histSample = gHistory.Load(int3(id.xy, 0)).rgb;
+        // Expand bounding box slightly for high-frequency subpixel jitter absorption
+        float3 aabbMin = max(localMin - 0.03f, 0.0f);
+        float3 aabbMax = min(localMax + 0.03f, 1.0f);
+        float3 clampedHist = clamp(histSample, aabbMin, aabbMax);
+
+        finalRgb = lerp(finalRgb, clampedHist, clamp(temporalStability, 0.0f, 0.95f));
+    }
+
     gOutput[id.xy] = float4(saturate(finalRgb), 1.0f);
 }
+

@@ -4,6 +4,7 @@
 #include <thread>
 #include <atomic>
 #include <iomanip>
+#include <algorithm>
 
 #include "capture/capture_manager.h"
 #include "neural_engine/neural_upscaler.h"
@@ -41,9 +42,12 @@ int main(int argc, char* argv[]) {
     float structureIntensity = config.GetFloat("structure_intensity", 0.40f);
     float toneIntensity      = config.GetFloat("tone_intensity", 0.10f);
     float splitScreen        = config.GetFloat("debug_split_screen", 0.0f);
+    float temporalStability  = config.GetFloat("temporal_stability", 0.85f);
     int   scaleFactor        = config.GetInt("scale_factor", 2);
     int   toggleKey          = config.GetInt("toggle_key", 83); // 'S'
     int   reloadKey          = config.GetInt("reload_key", 82); // 'R'
+    int   toggleModeKey      = config.GetInt("toggle_mode_key", 87); // 'W'
+    std::string captureMode  = config.GetString("capture_mode", "window");
     std::string modelPath    = config.GetString("model_path", "models/fsr_ng_model.safetensors");
     std::string expectedSha  = config.GetString("expected_sha256", "");
 
@@ -51,6 +55,8 @@ int main(int argc, char* argv[]) {
     std::cout << "[Config] Neural Intensity: " << intensity << "\n";
     std::cout << "[Config] Structure Sharpening: " << structureIntensity << "\n";
     std::cout << "[Config] Tone Intensity: " << toneIntensity << "\n";
+    std::cout << "[Config] Temporal Stability: " << temporalStability << "\n";
+    std::cout << "[Config] Initial Capture Mode: " << captureMode << "\n";
     std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "\n";
 
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
@@ -134,6 +140,8 @@ int main(int argc, char* argv[]) {
     upscaler.params.structureIntensity = structureIntensity;
     upscaler.params.toneIntensity = toneIntensity;
     upscaler.params.splitScreen = splitScreen;
+    upscaler.params.temporalStability = temporalStability;
+    upscaler.params.resetHistory = 1.0f;
 
     // 7. Register Global Hotkeys
     HotkeyManager hotkeys(overlay.hwnd());
@@ -141,12 +149,25 @@ int main(int argc, char* argv[]) {
         hotkeys.OnHotKey(w, l);
     });
     std::atomic<bool> scalingActive{ true };
+    std::atomic<bool> windowModeActive{ captureMode == "window" };
+    HWND lastForegroundHwnd = nullptr;
+    std::string currentTargetTitle = "Desktop";
 
     // Ctrl+Alt+S: Toggle live scaling
     hotkeys.Register(toggleKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         scalingActive = !scalingActive.load();
         overlay.Show(scalingActive.load());
+        upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Scaling toggled: " << (scalingActive.load() ? "ENABLED (Visible)" : "DISABLED (Hidden)") << std::endl;
+    });
+
+    // Ctrl+Alt+W: Toggle between Dynamic Foreground Window and Full Desktop
+    hotkeys.Register(toggleModeKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
+        windowModeActive = !windowModeActive.load();
+        upscaler.ResetHistory();
+        std::cout << "\n[Hotkey] Capture mode toggled: "
+                  << (windowModeActive.load() ? "DYNAMIC ACTIVE WINDOW (Borderless Upscale)" : "FULL MONITOR DESKTOP")
+                  << std::endl;
     });
 
     // Ctrl+Alt+R: Live reload settings.ini
@@ -156,10 +177,16 @@ int main(int argc, char* argv[]) {
         upscaler.params.structureIntensity = config.GetFloat("structure_intensity", 0.40f);
         upscaler.params.toneIntensity      = config.GetFloat("tone_intensity", 0.10f);
         upscaler.params.splitScreen        = config.GetFloat("debug_split_screen", 0.0f);
+        upscaler.params.temporalStability  = config.GetFloat("temporal_stability", 0.85f);
+        std::string newMode = config.GetString("capture_mode", "window");
+        windowModeActive = (newMode == "window");
+        upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
                   << " Intensity=" << upscaler.params.intensity
                   << " Structure=" << upscaler.params.structureIntensity
                   << " Tone=" << upscaler.params.toneIntensity
+                  << " Temporal=" << upscaler.params.temporalStability
+                  << " Mode=" << (windowModeActive.load() ? "Window" : "Desktop")
                   << " SplitScreen=" << upscaler.params.splitScreen << std::endl;
     });
 
@@ -167,6 +194,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n=========================================================\n";
     std::cout << "  FSR-NG Active! Controls:\n";
     std::cout << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n";
+    std::cout << "  * [Ctrl + Alt + W] : Toggle Window vs Desktop mode\n";
     std::cout << "  * [Ctrl + Alt + R] : Reload settings.ini live\n";
     std::cout << "  * [Ctrl + C]       : Exit application\n";
     std::cout << "=========================================================\n\n";
@@ -186,14 +214,42 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // A. Acquire frame from GPU VRAM
+        // A. Handle Dynamic Foreground Window Crop
+        if (windowModeActive.load()) {
+            WindowClientInfo wInfo = capture.GetForegroundClientArea(overlay.hwnd());
+            if (wInfo.valid && capWidth > 0 && capHeight > 0) {
+                float cropX = std::clamp(static_cast<float>(wInfo.x) / static_cast<float>(capWidth), 0.0f, 1.0f);
+                float cropY = std::clamp(static_cast<float>(wInfo.y) / static_cast<float>(capHeight), 0.0f, 1.0f);
+                float cropW = std::clamp(static_cast<float>(wInfo.width) / static_cast<float>(capWidth), 0.01f, 1.0f);
+                float cropH = std::clamp(static_cast<float>(wInfo.height) / static_cast<float>(capHeight), 0.01f, 1.0f);
+
+                upscaler.params.captureCrop = float4{ cropX, cropY, cropW, cropH };
+                upscaler.params.modeWindow = 1.0f;
+
+                if (wInfo.hwnd != lastForegroundHwnd) {
+                    lastForegroundHwnd = wInfo.hwnd;
+                    currentTargetTitle = wInfo.title.empty() ? "Target Window" : wInfo.title;
+                    upscaler.ResetHistory();
+                    std::cout << "\n[Target Window] Active: \"" << currentTargetTitle
+                              << "\" (" << wInfo.width << "x" << wInfo.height << ")" << std::endl;
+                }
+            } else {
+                upscaler.params.modeWindow = 0.0f;
+                upscaler.params.captureCrop = float4{ 0.0f, 0.0f, 1.0f, 1.0f };
+            }
+        } else {
+            upscaler.params.modeWindow = 0.0f;
+            upscaler.params.captureCrop = float4{ 0.0f, 0.0f, 1.0f, 1.0f };
+        }
+
+        // B. Acquire frame from GPU VRAM
         ID3D12Resource* inputFrame = capture.AcquireLatestFrame();
         if (!inputFrame) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
 
-        // B. Execute Neural Upscaler Compute Pass
+        // C. Execute Neural Upscaler Compute Pass
         computeAlloc->Reset();
         computeCmd->Reset(computeAlloc.Get(), nullptr);
 
@@ -203,7 +259,7 @@ int main(int argc, char* argv[]) {
         ID3D12CommandList* lists[] = { computeCmd.Get() };
         computeQueue->ExecuteCommandLists(1, lists);
 
-        // C. Present via Flip Discard SwapChain (VSync synchronized)
+        // D. Present via Flip Discard SwapChain (VSync synchronized)
         if (upscaler.output()) {
             presenter.Present(upscaler.output(), true);
         }
@@ -217,8 +273,9 @@ int main(int argc, char* argv[]) {
             lastFpsTime = now;
 
             std::cout << "\r[Running] FPS: " << std::fixed << std::setprecision(1) << currentFps
-                      << " | In: " << capWidth << "x" << capHeight
+                      << " | Mode: " << (upscaler.params.modeWindow > 0.5f ? "WINDOW" : "DESKTOP")
                       << " | Out: " << upscaler.outWidth() << "x" << upscaler.outHeight()
+                      << " | Temporal: " << upscaler.params.temporalStability
                       << " | Intensity: " << upscaler.params.intensity
                       << " | Split: " << (upscaler.params.splitScreen > 0.5f ? "ON" : "OFF")
                       << std::flush;

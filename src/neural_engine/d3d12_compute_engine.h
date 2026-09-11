@@ -14,8 +14,15 @@ struct float2 {
     float y = 0.0f;
 };
 
+struct float4 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float w = 0.0f;
+};
+
 // Parameters uploaded to the compute shader each frame.
-// 16-byte aligned matching cbuffer Params in neural_scale_cs.hlsl.
+// 16-byte aligned matching cbuffer Params in neural_scale_cs.hlsl (64 bytes total).
 struct alignas(16) ScaleParams {
     float2 inSize;              // offset 0 (8 bytes)
     float2 outSize;             // offset 8 (8 bytes)
@@ -24,8 +31,10 @@ struct alignas(16) ScaleParams {
     float  toneIntensity = 0.10f;      // offset 24 (4 bytes)
     float  splitScreen = 0.0f;         // offset 28 (4 bytes)
     float  hasWeights = 0.0f;          // offset 32 (4 bytes)
-    float  pad1 = 0.0f;                // offset 36 (4 bytes)
-    float2 pad2{};              // offset 40 (8 bytes) -> 48 bytes total (multiple of 16)
+    float  temporalStability = 0.85f;  // offset 36 (4 bytes)
+    float  resetHistory = 0.0f;        // offset 40 (4 bytes)
+    float  modeWindow = 0.0f;          // offset 44 (4 bytes)
+    float4 captureCrop{ 0.0f, 0.0f, 1.0f, 1.0f }; // offset 48 (16 bytes)
 };
 
 class D3D12ComputeEngine {
@@ -42,12 +51,13 @@ public:
     // Upload neural model weights to GPU structured buffer
     bool SetWeights(const void* data, size_t byteSize);
 
-    // Prepare descriptor heap for input SRV (t0), weights SRV (t1), and output UAV (u0)
-    bool BindDescriptors(ID3D12Resource* input, ID3D12Resource* output);
+    // Prepare descriptor heap for input SRV (t0), weights SRV (t1), history SRV (t2), and output UAV (u0)
+    bool BindDescriptors(ID3D12Resource* input, ID3D12Resource* history, ID3D12Resource* output);
 
     // Dispatch compute shader
     void Upscale(ID3D12GraphicsCommandList* cmd,
                  ID3D12Resource* input,
+                 ID3D12Resource* history,
                  ID3D12Resource* output,
                  const ScaleParams& params);
 

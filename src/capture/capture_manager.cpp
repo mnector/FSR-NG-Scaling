@@ -339,4 +339,56 @@ ID3D12Resource* CaptureManager::AcquireLatestFrame() {
     return d3d12SharedResource_.Get();
 }
 
+WindowClientInfo CaptureManager::GetForegroundClientArea(HWND excludeHwnd) {
+    WindowClientInfo info{};
+    HWND fg = GetForegroundWindow();
+    if (!fg || fg == excludeHwnd || !IsWindow(fg)) {
+        return info;
+    }
+
+    if (IsIconic(fg) || !IsWindowVisible(fg)) {
+        return info;
+    }
+
+    char className[256] = { 0 };
+    GetClassNameA(fg, className, sizeof(className));
+    if (strcmp(className, "Progman") == 0 ||
+        strcmp(className, "WorkerW") == 0 ||
+        strcmp(className, "Shell_TrayWnd") == 0 ||
+        strcmp(className, "Shell_SecondaryTrayWnd") == 0 ||
+        strcmp(className, "Windows.UI.Core.CoreWindow") == 0 ||
+        strcmp(className, "FSRNG_OverlayClass") == 0) {
+        return info;
+    }
+
+    RECT rc{};
+    if (!GetClientRect(fg, &rc)) {
+        return info;
+    }
+
+    int w = rc.right - rc.left;
+    int h = rc.bottom - rc.top;
+    if (w < 128 || h < 128) {
+        return info; // Ignore toolbars, popups, or invisible floating windows
+    }
+
+    POINT pt{ rc.left, rc.top };
+    if (!ClientToScreen(fg, &pt)) {
+        return info;
+    }
+
+    info.x = pt.x;
+    info.y = pt.y;
+    info.width = w;
+    info.height = h;
+    info.hwnd = fg;
+    info.valid = true;
+
+    char titleBuf[256] = { 0 };
+    GetWindowTextA(fg, titleBuf, sizeof(titleBuf));
+    info.title = titleBuf;
+
+    return info;
+}
+
 } // namespace fsrng

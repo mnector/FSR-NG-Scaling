@@ -30,13 +30,16 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             PostQuitMessage(0);
             return 0;
 
-        case WM_NCHITTEST:
-            // When clickThrough_ is true, mouse events pass through to the game.
-            // When clickThrough_ is false (e.g. ImGui menu open), mouse clicks go to the overlay.
-            if (self && !self->clickThrough_) {
-                return DefWindowProcW(hwnd, msg, wParam, lParam);
+        case WM_NCHITTEST: {
+            if (self && self->onHitTest_) {
+                int screenX = static_cast<short>(LOWORD(lParam));
+                int screenY = static_cast<short>(HIWORD(lParam));
+                if (self->onHitTest_(screenX, screenY)) {
+                    return HTCLIENT;
+                }
             }
             return HTTRANSPARENT;
+        }
 
         case WM_HOTKEY:
             if (self && self->onHotKey_) {
@@ -76,11 +79,11 @@ bool OverlayWindow::Create(const std::string& title, int width, int height) {
     height_ = screenH;
 
     // Extended styles:
-    // - WS_EX_LAYERED + WS_EX_TRANSPARENT: Guarantees full mouse click-through across processes
+    // - WS_EX_LAYERED: Enables GPU alpha blending and non-intrusive compositing
     // - WS_EX_NOACTIVATE: Never steals keyboard/mouse focus from the game
     // - WS_EX_TOOLWINDOW: Prevents Windows 11 Focus Assist from triggering "No Molestar" (fullscreen gaming mode)
     // - WS_EX_TOPMOST: Stays as an overlay on top of the game
-    DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+    DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
     DWORD style = WS_POPUP;
 
     std::wstring wTitle(title.begin(), title.end());

@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
         std::cerr << "[Engine] ERROR: " << upscaler.error() << std::endl;
         return 1;
     }
-    std::cout << "[Engine] D3D12 Compute Pipeline ready.\n";
+    std::cout << "[Engine] D3D12 Compute Pipeline ready." << std::endl;
 
     ID3D12Device* device = upscaler.engine().device();
     ID3D12CommandQueue* computeQueue = upscaler.engine().queue();
@@ -90,6 +90,7 @@ int main(int argc, char* argv[]) {
     // 2.1 Probe NVIDIA NGX DLSS-NR dynamic library & fallback gracefully to OpenNR SafeTensors
     NgxInterop ngx;
     ngx.ProbeAndInitialize(device);
+    std::cout << "[Engine] " << ngx.statusMessage() << std::endl;
 
     // 3. Command Allocator and List for Compute Dispatches
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> computeAlloc;
@@ -176,10 +177,12 @@ int main(int argc, char* argv[]) {
     if (!imgui.Initialize(overlay.hwnd(), device, directQueue, DXGI_FORMAT_B8G8R8A8_UNORM)) {
         std::cerr << "[ImGui] Warning: Failed to initialize Dear ImGui overlay\n";
     }
+    overlay.SetHitTestCallback([&](int x, int y) -> bool {
+        return imgui.IsPointInsideMenu(x, y);
+    });
+
     overlay.SetMsgCallback([&](HWND h, UINT m, WPARAM w, LPARAM l) -> bool {
-        bool handled = imgui.ProcessMessage(h, m, w, l);
-        overlay.SetClickThrough(!imgui.isVisible());
-        return handled;
+        return imgui.ProcessMessage(h, m, w, l);
     });
 
     // 7. Register Global Hotkeys
@@ -191,6 +194,15 @@ int main(int argc, char* argv[]) {
     std::atomic<bool> windowModeActive{ captureMode == "window" };
     HWND lastForegroundHwnd = nullptr;
     std::string currentTargetTitle = "Desktop";
+
+    // Insert or Home: Toggle DLSS 5 Neural Rendering GUI menu
+    auto toggleGuiMenu = [&]() {
+        imgui.ToggleVisibility();
+        std::cout << "\n[Hotkey] DLSS 5 GUI Menu: "
+                  << (imgui.isVisible() ? "OPEN (Interactive)" : "CLOSED (Hidden)") << std::endl;
+    };
+    hotkeys.Register(VK_INSERT, 0, toggleGuiMenu);
+    hotkeys.Register(VK_HOME, 0, toggleGuiMenu);
 
     // Ctrl+Alt+S: Toggle live scaling
     hotkeys.Register(toggleKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {

@@ -31,6 +31,7 @@ public:
     void SetCloseCallback(std::function<void()> cb) { onClose_ = std::move(cb); }
     void SetHotKeyCallback(std::function<void(WPARAM, LPARAM)> cb) { onHotKey_ = std::move(cb); }
     void SetMsgCallback(std::function<bool(HWND, UINT, WPARAM, LPARAM)> cb) { onMsg_ = std::move(cb); }
+    void SetHitTestCallback(std::function<bool(int, int)> cb) { onHitTest_ = std::move(cb); }
 
     bool isClickThrough() const { return clickThrough_; }
 
@@ -46,6 +47,7 @@ private:
     std::function<void()> onClose_;
     std::function<void(WPARAM, LPARAM)> onHotKey_;
     std::function<bool(HWND, UINT, WPARAM, LPARAM)> onMsg_;
+    std::function<bool(int, int)> onHitTest_;
 };
 
 } // namespace fsrng

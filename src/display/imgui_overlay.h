@@ -26,6 +26,12 @@ public:
     void SetVisible(bool visible) { visible_ = visible; }
     void ToggleVisibility() { visible_ = !visible_; }
 
+    bool IsPointInsideMenu(int x, int y) const {
+        if (!visible_) return false;
+        return (x >= menuPosX_ && x <= (menuPosX_ + menuWidth_) &&
+                y >= menuPosY_ && y <= (menuPosY_ + menuHeight_));
+    }
+
 private:
     void SetupDarkTheme();
 
@@ -34,7 +40,12 @@ private:
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvHeap_;
 
     bool initialized_ = false;
-    bool visible_ = true; // Shown by default for testing/tuning; toggleable with Insert / Home
+    bool visible_ = false; // Hidden by default; toggle with Insert / Home
+
+    float menuPosX_ = 24.0f;
+    float menuPosY_ = 24.0f;
+    float menuWidth_ = 520.0f;
+    float menuHeight_ = 620.0f;
 
     // UI state mirroring RenoDX / DLSS 5 ReShade addon
     bool enableNR_ = true;

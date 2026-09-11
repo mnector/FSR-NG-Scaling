@@ -1,4 +1,6 @@
 #include "ngx_interop.h"
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 #include <iostream>
 
 namespace fsrng {
@@ -13,6 +15,24 @@ bool NgxInterop::ProbeAndInitialize(ID3D12Device* device, const std::string& dll
     if (!device) {
         statusMessage_ = "Invalid D3D12 device";
         return false;
+    }
+
+    // Check adapter vendor before attempting to load NVIDIA DLL
+    LUID luid = device->GetAdapterLuid();
+    Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
+    if (SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))) && factory) {
+        Microsoft::WRL::ComPtr<IDXGIAdapter1> curAdapter;
+        for (UINT i = 0; factory->EnumAdapters1(i, curAdapter.ReleaseAndGetAddressOf()) != DXGI_ERROR_NOT_FOUND; ++i) {
+            DXGI_ADAPTER_DESC1 desc;
+            curAdapter->GetDesc1(&desc);
+            if (desc.AdapterLuid.LowPart == luid.LowPart && desc.AdapterLuid.HighPart == luid.HighPart) {
+                if (desc.VendorId != 0x10DE) { // 0x10DE = NVIDIA Corporation
+                    statusMessage_ = "AMD RDNA / Non-NVIDIA GPU detected. Using native OpenNR DLSS 5 SafeTensors pipeline.";
+                    return false;
+                }
+                break;
+            }
+        }
     }
 
     hModule_ = LoadLibraryA(dllPath.c_str());

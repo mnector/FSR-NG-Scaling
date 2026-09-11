@@ -154,6 +154,13 @@ void ImGuiOverlay::Render(ID3D12GraphicsCommandList* cmdList, ScaleParams& param
     ImGui::SetNextWindowSize(ImVec2(520.0f, 620.0f), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin("DLSS 5 Neural Rendering", &visible_, ImGuiWindowFlags_NoCollapse)) {
+        ImVec2 pos = ImGui::GetWindowPos();
+        ImVec2 sz  = ImGui::GetWindowSize();
+        menuPosX_   = pos.x;
+        menuPosY_   = pos.y;
+        menuWidth_  = sz.x;
+        menuHeight_ = sz.y;
+
         ImGui::TextDisabled("File:        renodx-dlss5.addon64 (OpenNR Bridge)");
         ImGui::TextDisabled("Version:     0.2026.827.2036");
         ImGui::TextDisabled("Description: Generic experimental DLSS Neural Rendering post-pass\n             for DX12 games using NGX or Streamline DLSS");

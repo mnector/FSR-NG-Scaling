@@ -1,0 +1,31 @@
+# Compilación y temporales de CMake y Visual Studio
+build/
+bin/
+obj/
+*.vcxproj*
+*.sln
+*.slnx
+.vs/
+.vscode/
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+
+# Binarios propietarios y librerías compiladas
+*.dll
+*.lib
+*.exp
+*.exe
+*.pdb
+*.bmp
+
+# Pesos y modelos neuronales (evitar límites de GitHub y copyright)
+*.safetensors
+models/*.safetensors
+weights/*.safetensors
+nvngx_dlssnr.dll
+
+# Mantener la estructura de carpetas pero vacía de binarios
+!models/.gitkeep
+!weights/.gitkeep
+!weights/model_manifest.json

@@ -16,6 +16,12 @@ OverlayWindow::~OverlayWindow() {
 LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     auto* self = reinterpret_cast<OverlayWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 
+    if (self && self->onMsg_) {
+        if (self->onMsg_(hwnd, msg, wParam, lParam)) {
+            return 0;
+        }
+    }
+
     switch (msg) {
         case WM_CLOSE:
             if (self && self->onClose_) {
@@ -25,8 +31,11 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             return 0;
 
         case WM_NCHITTEST:
-            // Allow all mouse clicks, cursor events and interaction to pass directly
-            // through the overlay to the underlying game/application
+            // When clickThrough_ is true, mouse events pass through to the game.
+            // When clickThrough_ is false (e.g. ImGui menu open), mouse clicks go to the overlay.
+            if (self && !self->clickThrough_) {
+                return DefWindowProcW(hwnd, msg, wParam, lParam);
+            }
             return HTTRANSPARENT;
 
         case WM_HOTKEY:

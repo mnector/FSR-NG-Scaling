@@ -4,6 +4,7 @@
 #include <wrl/client.h>
 #include <vector>
 #include <string>
+#include <functional>
 
 namespace fsrng {
 
@@ -17,8 +18,9 @@ public:
     // Initialize DXGI Flip Discard SwapChain for the overlay HWND
     bool Initialize(HWND hwnd, ID3D12Device* device, ID3D12CommandQueue* directQueue, int width, int height);
 
-    // Copy upscaled texture to current backbuffer, transition states, and present
-    bool Present(ID3D12Resource* upscaledSource, bool vsync = false);
+    // Copy upscaled texture to current backbuffer, transition states, and present.
+    // Optional overlayCb draws Dear ImGui directly onto the backbuffer before presentation.
+    bool Present(ID3D12Resource* upscaledSource, std::function<void(ID3D12GraphicsCommandList*)> overlayCb = nullptr, bool vsync = false);
 
     // Handle window resize
     bool Resize(int width, int height);

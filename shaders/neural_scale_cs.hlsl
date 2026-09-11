@@ -16,20 +16,28 @@ RWTexture2D<float4>     gOutput   : register(u0);
 
 cbuffer Params : register(b0)
 {
-    float2 inSize;              // Low-resolution input dimensions (offset 0)
-    float2 outSize;             // Reconstructed output dimensions (offset 8)
-    float  intensity;           // 0..1 neural generative blend strength (offset 16)
-    float  structureIntensity;  // 0..1 structural edge synthesis strength (offset 20)
-    float  toneIntensity;       // -1..1 HDR tone & perceptual contrast (offset 24)
-    float  splitScreen;         // > 0.5 enables split comparison (offset 28)
-    float  hasWeights;          // > 0.5 if SafeTensors weights buffer is active (offset 32)
-    float  temporalStability;   // 0..0.95 temporal accumulation strength (offset 36)
-    float  resetHistory;        // > 0.5 to discard previous history (offset 40)
-    float  modeWindow;          // > 0.5 if capturing cropped foreground window (offset 44)
-    float4 captureCrop;         // (cropX, cropY, cropW, cropH) in 0..1 normalized UV (offset 48)
-    float  detailBoost;         // 0.5..2.5 generative texture detail amplifier (offset 64)
-    float  catmullRom;          // > 0.5 enables high-fidelity Catmull-Rom bicubic (offset 68)
-    float2 pad;                 // offset 72 (8 bytes) -> 80 bytes total
+    float2 inSize;                  // Low-resolution input dimensions (offset 0)
+    float2 outSize;                 // Reconstructed output dimensions (offset 8)
+    float  intensity;               // 0..2 neural generative blend strength / NR Intensity (offset 16)
+    float  structureIntensity;      // 0..2 structural edge synthesis strength / Local Structure (offset 20)
+    float  toneIntensity;           // -1..2 HDR tone & perceptual contrast / Local Tone (offset 24)
+    float  splitScreen;             // > 0.5 enables split comparison (offset 28)
+    float  hasWeights;              // > 0.5 if SafeTensors weights buffer is active (offset 32)
+    float  temporalStability;       // 0..0.95 temporal accumulation strength (offset 36)
+    float  resetHistory;            // > 0.5 to discard previous history (offset 40)
+    float  modeWindow;              // > 0.5 if capturing cropped foreground window (offset 44)
+    float4 captureCrop;             // (cropX, cropY, cropW, cropH) in 0..1 normalized UV (offset 48)
+    float  detailBoost;             // 0.5..2.5 generative texture detail amplifier (offset 64)
+    float  catmullRom;              // > 0.5 enables high-fidelity Catmull-Rom bicubic (offset 68)
+    float  skinStructureStrength;   // -1.0..1.0 Skin Structure Strength (offset 72)
+    float  nrPasses;                // 1..4 multi-pass neural reconstruction count (offset 76)
+    float  scenePaperWhite;         // 0.5..3.0 Scene Paper-White scale (offset 80)
+    float  hdrTransferStrength;     // 0.0..2.0 HDR Transfer Strength (offset 84)
+    float  colorStrength;           // 0.0..2.0 Color Strength (offset 88)
+    float  enableNR;                // > 0.5 enables DLSS Neural Rendering (offset 92)
+    float  nrStyle;                 // 0: Default, 1: Cinematic, 2: Aggressive (offset 96)
+    float  autoMask;                // > 0.5 Automatic Mask / Zero-Ghosting Motion Gate (offset 100)
+    float2 pad;                     // offset 104 (8 bytes) -> 112 bytes total (16-byte aligned)
 };
 
 // 8x8 Window Size (N = 64 tokens) matching Swin-Transformer W-MSA specification
@@ -112,12 +120,31 @@ float4 SampleCatmullRom(float2 uv)
     return color;
 }
 
-// Tone Curve & Perceptual Contrast
+// Human skin tone probability in YCbCr color space (detects Caucasian, Asian, African, Latin skin clusters)
+float ComputeSkinProbability(float3 rgb)
+{
+    float y  =  0.299f * rgb.r + 0.587f * rgb.g + 0.114f * rgb.b;
+    float cb = -0.1687f * rgb.r - 0.3313f * rgb.g + 0.5f * rgb.b + 0.5f;
+    float cr =  0.5f * rgb.r - 0.4187f * rgb.g - 0.0813f * rgb.b + 0.5f;
+
+    // Skin cluster in normalized [0, 1]
+    float cbDist = abs(cb - 0.41f);
+    float crDist = abs(cr - 0.59f);
+
+    float cbScore = saturate(1.0f - cbDist / 0.11f);
+    float crScore = saturate(1.0f - crDist / 0.09f);
+    float lumaScore = saturate((y - 0.08f) * 7.0f);
+
+    return cbScore * crScore * lumaScore;
+}
+
+// Tone Curve & Perceptual Contrast (modulated by toneIntensity & hdrTransferStrength)
 float3 ApplyPerceptualTone(float3 color)
 {
-    float gamma = 1.0f - toneIntensity * 0.35f;
+    float toneMul = clamp(toneIntensity, -1.0f, 2.0f);
+    float gamma = 1.0f - toneMul * 0.25f * clamp(hdrTransferStrength, 0.5f, 2.0f);
     gamma = max(gamma, 0.1f);
-    float lift = toneIntensity * 0.08f;
+    float lift = toneMul * 0.05f;
     return pow(max(color + lift, 0.0f), 1.0f / gamma);
 }
 
@@ -298,42 +325,80 @@ void CSMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 id : SV
         FastGELU(attentionResidual.b * wProj)
     );
 
-    // Deep cascaded residual refinement across model layers
+    // Deep cascaded residual refinement across model layers (multi-pass 1..4)
+    uint passes = clamp((uint)round(nrPasses), 1u, 4u);
     if (hasWeights > 0.5f)
     {
         uint offCascade   = (uint)gWeights[10];
-        uint numCascade   = min((uint)gWeights[11], 16u);
+        uint numCascade   = min((uint)gWeights[11], 64u);
         uint strideCascade= (uint)gWeights[12];
 
         if (offCascade > 0 && numCascade > 0 && strideCascade > 0)
         {
-            [unroll]
-            for (uint stage = 0; stage < 4; ++stage)
+            [loop]
+            for (uint p = 0; p < passes; ++p)
             {
-                uint cOffset = offCascade + stage * strideCascade + (linearIdx * 4) % strideCascade;
-                float w0 = clamp(gWeights[cOffset + 0], -1.2f, 1.2f);
-                float w1 = clamp(gWeights[cOffset + 1], -1.2f, 1.2f);
-                float w2 = clamp(gWeights[cOffset + 2], -1.2f, 1.2f);
+                for (uint stage = 0; stage < 4; ++stage)
+                {
+                    uint cOffset = offCascade + ((stage + p * 4) % numCascade) * strideCascade + (linearIdx * 4) % strideCascade;
+                    float w0 = clamp(gWeights[cOffset + 0], -1.2f, 1.2f);
+                    float w1 = clamp(gWeights[cOffset + 1], -1.2f, 1.2f);
+                    float w2 = clamp(gWeights[cOffset + 2], -1.2f, 1.2f);
 
-                synthDetail += float3(
-                    FastGELU(synthDetail.r * w0 * 0.20f),
-                    FastGELU(synthDetail.g * w1 * 0.20f),
-                    FastGELU(synthDetail.b * w2 * 0.20f)
-                );
+                    synthDetail += float3(
+                        FastGELU(synthDetail.r * w0 * 0.20f),
+                        FastGELU(synthDetail.g * w1 * 0.20f),
+                        FastGELU(synthDetail.b * w2 * 0.20f)
+                    );
+                }
             }
         }
     }
 
     // 5. Generative Micro-Detail Synthesis (Edge-Guided Detail Boosting)
-    // Enhances sub-pixel structures (hair, foliage, distant cloth, textures) without ringing
     float edgeEnergy = saturate(gradMag * 6.0f);
     float effectiveBoost = clamp(detailBoost, 0.5f, 2.5f);
+    // NR Style: 0: Default, 1: Cinematic (softer high freq), 2: Aggressive (higher edge contrast)
+    float styleMult = (nrStyle > 1.5f) ? 1.4f : ((nrStyle > 0.5f) ? 0.75f : 1.0f);
 
-    float3 microSynthesis = synthDetail * (structureIntensity * 2.5f * wResidual * effectiveBoost);
+    float3 microSynthesis = synthDetail * (structureIntensity * 2.5f * wResidual * effectiveBoost * styleMult);
 
     // Sub-pixel directional sharpening
-    float3 directionalSharpening = float3(centerCurv, centerCurv, centerCurv) * (edgeEnergy * 0.25f * effectiveBoost);
+    float3 directionalSharpening = float3(centerCurv, centerCurv, centerCurv) * (edgeEnergy * 0.25f * effectiveBoost * styleMult);
     float3 generativeFeatures = microSynthesis + directionalSharpening;
+
+    // 5.1 Active Skin Structure Strength (-1.0 to +1.0)
+    float skinProb = ComputeSkinProbability(centerRgb.rgb);
+    if (skinProb > 0.02f)
+    {
+        if (skinStructureStrength > 0.0f)
+        {
+            // Positive: amplify epidermal micro-details, micro-porosity, and fine facial features
+            float skinBoost = skinStructureStrength * 2.5f * skinProb;
+            generativeFeatures += synthDetail * skinBoost;
+            directionalSharpening += float3(centerCurv, centerCurv, centerCurv) * (skinBoost * 0.45f);
+        }
+        else if (skinStructureStrength < 0.0f)
+        {
+            // Negative: edge-preserving bilateral skin softening (smooths blemishes, preserves eyes/lips/hair)
+            float3 bilateralSkin = float3(0.0f, 0.0f, 0.0f);
+            float bSum = 0.0001f;
+            [unroll]
+            for (int s = 0; s < 8; ++s)
+            {
+                int2 nc = clamp(selfCoord + offsets[s], int2(0, 0), int2(WINDOW_DIM - 1, WINDOW_DIM - 1));
+                uint nIdx = nc.y * WINDOW_DIM + nc.x;
+                float3 nColor = g_tileRgb[nIdx].rgb;
+                float colorDist = length(nColor - centerRgb.rgb);
+                float bw = exp(-colorDist * 16.0f); // High sharpness on edges, smooth within skin
+                bilateralSkin += nColor * bw;
+                bSum += bw;
+            }
+            bilateralSkin /= bSum;
+            float smoothAmount = abs(skinStructureStrength) * skinProb * 0.85f;
+            generativeFeatures = lerp(generativeFeatures, (bilateralSkin - centerRgb.rgb), smoothAmount);
+        }
+    }
 
     // 6. Photometric Envelope & Anti-Ringing Guard
     float3 reconstructed = centerRgb.rgb + generativeFeatures;
@@ -341,25 +406,36 @@ void CSMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID, uint3 id : SV
     float3 safeMax = min(localMax + 0.04f, 1.0f);
     reconstructed = clamp(reconstructed, safeMin, safeMax);
 
-    // 7. Neural Generative Blend
-    float3 finalRgb = lerp(centerRgb.rgb, reconstructed, clamp(intensity, 0.0f, 1.0f));
+    // 7. Neural Generative Blend (NR Intensity)
+    float effectiveIntensity = (enableNR > 0.5f) ? clamp(intensity, 0.0f, 2.0f) : 0.0f;
+    float3 finalRgb = lerp(centerRgb.rgb, reconstructed, effectiveIntensity);
 
     // 8. Perceptual HDR Tone & Contrast
     finalRgb = ApplyPerceptualTone(finalRgb);
 
-    // 9. Temporal Accumulation with Adaptive AABB Clamping ($S_{t-1}$)
+    // 8.1 Control-Compatible Color Transfer (Color Strength & Scene Paper-White)
+    float lumaFinal = RgbToLuma(finalRgb);
+    finalRgb = lerp(float3(lumaFinal, lumaFinal, lumaFinal), finalRgb, clamp(colorStrength, 0.0f, 2.0f));
+    finalRgb *= clamp(scenePaperWhite, 0.5f, 3.0f);
+
+    // 9. Temporal Accumulation with Zero-Ghosting Motion Discontinuity Gating ($S_{t-1}$)
     if (temporalStability > 0.01f && resetHistory < 0.5f)
     {
         float3 histSample = gHistory.Load(int3(id.xy, 0)).rgb;
-        // Expand AABB proportionally to local contrast to suppress sub-pixel jitter
-        float3 aabbMin = max(localMin - 0.025f, 0.0f);
-        float3 aabbMax = min(localMax + 0.025f, 1.0f);
+        float3 aabbMin = max(localMin - 0.02f, 0.0f);
+        float3 aabbMax = min(localMax + 0.02f, 1.0f);
         float3 clampedHist = clamp(histSample, aabbMin, aabbMax);
 
-        finalRgb = lerp(finalRgb, clampedHist, clamp(temporalStability, 0.0f, 0.95f));
+        // Motion Discontinuity Gating: detects sudden pixel changes between current and history
+        float motionDiscontinuity = length(centerRgb.rgb - histSample);
+        float motionGate = (autoMask > 0.5f) ? saturate(1.0f - motionDiscontinuity * 12.0f) : 1.0f;
+
+        float effectiveTemporal = clamp(temporalStability, 0.0f, 0.95f) * motionGate;
+        finalRgb = lerp(finalRgb, clampedHist, effectiveTemporal);
     }
 
     gOutput[id.xy] = float4(saturate(finalRgb), 1.0f);
 }
+
 
 

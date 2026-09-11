@@ -168,7 +168,7 @@ void SwapchainPresenter::WaitForGpu() {
     }
 }
 
-bool SwapchainPresenter::Present(ID3D12Resource* upscaledSource, bool vsync) {
+bool SwapchainPresenter::Present(ID3D12Resource* upscaledSource, std::function<void(ID3D12GraphicsCommandList*)> overlayCb, bool vsync) {
     (void)vsync;
     if (!swapChain_ || !upscaledSource) return false;
 
@@ -199,14 +199,45 @@ bool SwapchainPresenter::Present(ID3D12Resource* upscaledSource, bool vsync) {
     // Blit copy into swapchain backbuffer
     cmdList_->CopyResource(currentBackBuffer, upscaledSource);
 
-    // Revert barriers
-    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+    // Revert upscaledSource barrier back to UNORDERED_ACCESS
+    D3D12_RESOURCE_BARRIER revertSource{};
+    revertSource.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    revertSource.Transition.pResource = upscaledSource;
+    revertSource.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    revertSource.Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    revertSource.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    cmdList_->ResourceBarrier(1, &revertSource);
 
-    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+    // If Dear ImGui overlay callback is present, transition backbuffer to RENDER_TARGET and draw UI
+    if (overlayCb) {
+        D3D12_RESOURCE_BARRIER rtBarrier{};
+        rtBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        rtBarrier.Transition.pResource = currentBackBuffer;
+        rtBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        rtBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        rtBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        cmdList_->ResourceBarrier(1, &rtBarrier);
 
-    cmdList_->ResourceBarrier(2, barriers);
+        D3D12_CPU_DESCRIPTOR_HANDLE rtv = rtvHeap_->GetCPUDescriptorHandleForHeapStart();
+        rtv.ptr += (currentBufferIndex_ * rtvDescriptorSize_);
+        cmdList_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+
+        overlayCb(cmdList_.Get());
+
+        // Transition backbuffer: RENDER_TARGET -> PRESENT
+        rtBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+        rtBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+        cmdList_->ResourceBarrier(1, &rtBarrier);
+    } else {
+        // Transition backbuffer: COPY_DEST -> PRESENT
+        D3D12_RESOURCE_BARRIER presentBarrier{};
+        presentBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+        presentBarrier.Transition.pResource = currentBackBuffer;
+        presentBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+        presentBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+        presentBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+        cmdList_->ResourceBarrier(1, &presentBarrier);
+    }
 
     cmdList_->Close();
 

@@ -28,8 +28,15 @@ set(SOURCES
     src/neural_engine/ngx_interop.cpp
     src/display/overlay_window.cpp
     src/display/swapchain_presenter.cpp
+    src/display/imgui_overlay.cpp
     src/utils/config_reader.cpp
     src/utils/hotkey_manager.cpp
+    src/third_party/imgui/imgui.cpp
+    src/third_party/imgui/imgui_draw.cpp
+    src/third_party/imgui/imgui_tables.cpp
+    src/third_party/imgui/imgui_widgets.cpp
+    src/third_party/imgui/imgui_impl_win32.cpp
+    src/third_party/imgui/imgui_impl_dx12.cpp
 )
 
 set(HEADERS
@@ -41,6 +48,7 @@ set(HEADERS
     src/neural_engine/ngx_interop.h
     src/display/overlay_window.h
     src/display/swapchain_presenter.h
+    src/display/imgui_overlay.h
     src/utils/config_reader.h
     src/utils/hotkey_manager.h
 )
@@ -49,6 +57,7 @@ add_executable(FSR-NG-Scaling ${SOURCES} ${HEADERS})
 
 target_include_directories(FSR-NG-Scaling PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/third_party/imgui
 )
 
 # Strictly link the required Windows/DirectX libraries

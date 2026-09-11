@@ -11,6 +11,7 @@
 #include "neural_engine/ngx_interop.h"
 #include "display/overlay_window.h"
 #include "display/swapchain_presenter.h"
+#include "display/imgui_overlay.h"
 #include "utils/config_reader.h"
 #include "utils/hotkey_manager.h"
 
@@ -39,26 +40,35 @@ int main(int argc, char* argv[]) {
 
     // 1. Load Configuration
     ConfigReader config("config/settings.ini");
-    float intensity          = config.GetFloat("intensity", 0.75f);
-    float structureIntensity = config.GetFloat("structure_intensity", 0.40f);
-    float toneIntensity      = config.GetFloat("tone_intensity", 0.10f);
-    float splitScreen        = config.GetFloat("debug_split_screen", 0.0f);
-    float temporalStability  = config.GetFloat("temporal_stability", 0.85f);
-    float detailBoost        = config.GetFloat("detail_boost", 1.35f);
-    float catmullRom         = config.GetFloat("catmull_rom", 1.0f);
-    int   scaleFactor        = config.GetInt("scale_factor", 2);
-    int   toggleKey          = config.GetInt("toggle_key", 83); // 'S'
-    int   reloadKey          = config.GetInt("reload_key", 82); // 'R'
-    int   toggleModeKey      = config.GetInt("toggle_mode_key", 87); // 'W'
-    std::string captureMode  = config.GetString("capture_mode", "window");
-    std::string modelPath    = config.GetString("model_path", "models/fsr_ng_model.safetensors");
-    std::string expectedSha  = config.GetString("expected_sha256", "");
+    float intensity             = config.GetFloat("intensity", 1.00f);
+    float structureIntensity    = config.GetFloat("structure_intensity", 1.00f);
+    float toneIntensity         = config.GetFloat("tone_intensity", 1.00f);
+    float splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
+    float temporalStability     = config.GetFloat("temporal_stability", 0.0f); // Default 0 to eliminate ghosting
+    float detailBoost           = config.GetFloat("detail_boost", 1.35f);
+    float catmullRom            = config.GetFloat("catmull_rom", 1.0f);
+    float skinStructureStrength = config.GetFloat("skin_structure_strength", -1.00f);
+    float nrPasses              = config.GetFloat("nr_passes", 1.0f);
+    float scenePaperWhite       = config.GetFloat("scene_paper_white", 1.000f);
+    float hdrTransferStrength   = config.GetFloat("hdr_transfer_strength", 1.00f);
+    float colorStrength         = config.GetFloat("color_strength", 1.00f);
+    float enableNR              = config.GetFloat("enable_nr", 1.0f);
+    float autoMask              = config.GetFloat("auto_mask", 1.0f);
+    int   scaleFactor           = config.GetInt("scale_factor", 2);
+    int   toggleKey             = config.GetInt("toggle_key", 83); // 'S'
+    int   reloadKey             = config.GetInt("reload_key", 82); // 'R'
+    int   toggleModeKey         = config.GetInt("toggle_mode_key", 87); // 'W'
+    std::string captureMode     = config.GetString("capture_mode", "window");
+    std::string modelPath       = config.GetString("model_path", "models/fsr_ng_model.safetensors");
+    std::string expectedSha     = config.GetString("expected_sha256", "");
 
     std::cout << "[Config] Scale Factor: " << scaleFactor << "x\n";
-    std::cout << "[Config] Neural Intensity: " << intensity << "\n";
-    std::cout << "[Config] Structure Sharpening: " << structureIntensity << "\n";
-    std::cout << "[Config] Tone Intensity: " << toneIntensity << "\n";
-    std::cout << "[Config] Temporal Stability: " << temporalStability << "\n";
+    std::cout << "[Config] NR Intensity: " << intensity << "\n";
+    std::cout << "[Config] Local Structure: " << structureIntensity << "\n";
+    std::cout << "[Config] Local Tone: " << toneIntensity << "\n";
+    std::cout << "[Config] Skin Structure Strength: " << skinStructureStrength << "\n";
+    std::cout << "[Config] NR Passes: " << nrPasses << "\n";
+    std::cout << "[Config] Temporal Stability (Zero-Ghosting): " << temporalStability << "\n";
     std::cout << "[Config] Detail Boost (DLSS 5 OpenNR): " << detailBoost << "\n";
     std::cout << "[Config] Catmull-Rom 9-Tap Filter: " << (catmullRom > 0.5f ? "ON" : "OFF") << "\n";
     std::cout << "[Config] Initial Capture Mode: " << captureMode << "\n";
@@ -152,7 +162,25 @@ int main(int argc, char* argv[]) {
     upscaler.params.temporalStability = temporalStability;
     upscaler.params.detailBoost = detailBoost;
     upscaler.params.catmullRom = catmullRom;
+    upscaler.params.skinStructureStrength = skinStructureStrength;
+    upscaler.params.nrPasses = nrPasses;
+    upscaler.params.scenePaperWhite = scenePaperWhite;
+    upscaler.params.hdrTransferStrength = hdrTransferStrength;
+    upscaler.params.colorStrength = colorStrength;
+    upscaler.params.enableNR = enableNR;
+    upscaler.params.autoMask = autoMask;
     upscaler.params.resetHistory = 1.0f;
+
+    // 6.1 Initialize Dear ImGui overlay (DLSS 5 Neural Rendering menu)
+    ImGuiOverlay imgui;
+    if (!imgui.Initialize(overlay.hwnd(), device, directQueue, DXGI_FORMAT_B8G8R8A8_UNORM)) {
+        std::cerr << "[ImGui] Warning: Failed to initialize Dear ImGui overlay\n";
+    }
+    overlay.SetMsgCallback([&](HWND h, UINT m, WPARAM w, LPARAM l) -> bool {
+        bool handled = imgui.ProcessMessage(h, m, w, l);
+        overlay.SetClickThrough(!imgui.isVisible());
+        return handled;
+    });
 
     // 7. Register Global Hotkeys
     HotkeyManager hotkeys(overlay.hwnd());
@@ -184,13 +212,20 @@ int main(int argc, char* argv[]) {
     // Ctrl+Alt+R: Live reload settings.ini
     hotkeys.Register(reloadKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         config.Reload();
-        upscaler.params.intensity          = config.GetFloat("intensity", 0.75f);
-        upscaler.params.structureIntensity = config.GetFloat("structure_intensity", 0.40f);
-        upscaler.params.toneIntensity      = config.GetFloat("tone_intensity", 0.10f);
-        upscaler.params.splitScreen        = config.GetFloat("debug_split_screen", 0.0f);
-        upscaler.params.temporalStability  = config.GetFloat("temporal_stability", 0.85f);
-        upscaler.params.detailBoost        = config.GetFloat("detail_boost", 1.35f);
-        upscaler.params.catmullRom         = config.GetFloat("catmull_rom", 1.0f);
+        upscaler.params.intensity             = config.GetFloat("intensity", 1.00f);
+        upscaler.params.structureIntensity    = config.GetFloat("structure_intensity", 1.00f);
+        upscaler.params.toneIntensity         = config.GetFloat("tone_intensity", 1.00f);
+        upscaler.params.splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
+        upscaler.params.temporalStability     = config.GetFloat("temporal_stability", 0.0f);
+        upscaler.params.detailBoost           = config.GetFloat("detail_boost", 1.35f);
+        upscaler.params.catmullRom            = config.GetFloat("catmull_rom", 1.0f);
+        upscaler.params.skinStructureStrength = config.GetFloat("skin_structure_strength", -1.00f);
+        upscaler.params.nrPasses              = config.GetFloat("nr_passes", 1.0f);
+        upscaler.params.scenePaperWhite       = config.GetFloat("scene_paper_white", 1.000f);
+        upscaler.params.hdrTransferStrength   = config.GetFloat("hdr_transfer_strength", 1.00f);
+        upscaler.params.colorStrength         = config.GetFloat("color_strength", 1.00f);
+        upscaler.params.enableNR              = config.GetFloat("enable_nr", 1.0f);
+        upscaler.params.autoMask              = config.GetFloat("auto_mask", 1.0f);
         std::string newMode = config.GetString("capture_mode", "window");
         windowModeActive = (newMode == "window");
         upscaler.ResetHistory();
@@ -198,6 +233,8 @@ int main(int argc, char* argv[]) {
                   << " Intensity=" << upscaler.params.intensity
                   << " Structure=" << upscaler.params.structureIntensity
                   << " Tone=" << upscaler.params.toneIntensity
+                  << " SkinStructure=" << upscaler.params.skinStructureStrength
+                  << " NRPasses=" << upscaler.params.nrPasses
                   << " Temporal=" << upscaler.params.temporalStability
                   << " DetailBoost=" << upscaler.params.detailBoost
                   << " CatmullRom=" << (upscaler.params.catmullRom > 0.5f ? "ON" : "OFF")
@@ -208,15 +245,18 @@ int main(int argc, char* argv[]) {
     overlay.Show(true);
     std::cout << "\n=========================================================\n";
     std::cout << "  FSR-NG Active! Controls:\n";
+    std::cout << "  * [Insert] / [Home]: Toggle DLSS 5 Neural Rendering GUI menu\n";
     std::cout << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n";
     std::cout << "  * [Ctrl + Alt + W] : Toggle Window vs Desktop mode\n";
     std::cout << "  * [Ctrl + Alt + R] : Reload settings.ini live\n";
     std::cout << "  * [Ctrl + C]       : Exit application\n";
     std::cout << "=========================================================\n\n";
 
+
     // 8. Main Render Loop
     auto lastFpsTime = std::chrono::steady_clock::now();
     uint64_t frameCounter = 0;
+    uint64_t totalFramesRendered = 0;
     float currentFps = 0.0f;
 
     while (g_running.load()) {
@@ -274,9 +314,13 @@ int main(int argc, char* argv[]) {
         ID3D12CommandList* lists[] = { computeCmd.Get() };
         computeQueue->ExecuteCommandLists(1, lists);
 
-        // D. Present via Flip Discard SwapChain (VSync synchronized)
+        totalFramesRendered++;
+
+        // D. Present via Flip Discard SwapChain with live Dear ImGui DLSS 5 Neural Rendering overlay
         if (upscaler.output()) {
-            presenter.Present(upscaler.output(), true);
+            presenter.Present(upscaler.output(), [&](ID3D12GraphicsCommandList* cl) {
+                imgui.Render(cl, upscaler.params, currentFps, totalFramesRendered, upscaler.outWidth(), upscaler.outHeight());
+            }, true);
         }
 
         frameCounter++;
@@ -290,15 +334,17 @@ int main(int argc, char* argv[]) {
             std::cout << "\r[Running] FPS: " << std::fixed << std::setprecision(1) << currentFps
                       << " | Mode: " << (upscaler.params.modeWindow > 0.5f ? "WINDOW" : "DESKTOP")
                       << " | Out: " << upscaler.outWidth() << "x" << upscaler.outHeight()
+                      << " | Skin: " << upscaler.params.skinStructureStrength
+                      << " | Passes: " << (int)round(upscaler.params.nrPasses)
+                      << " | NR: " << (upscaler.params.enableNR > 0.5f ? "ON" : "OFF")
                       << " | Temporal: " << upscaler.params.temporalStability
-                      << " | DetailBoost: " << upscaler.params.detailBoost
-                      << " | CatmullRom: " << (upscaler.params.catmullRom > 0.5f ? "ON" : "OFF")
-                      << " | Split: " << (upscaler.params.splitScreen > 0.5f ? "ON" : "OFF")
+                      << " | Menu: " << (imgui.isVisible() ? "VISIBLE" : "HIDDEN")
                       << std::flush;
         }
     }
 
     std::cout << "\n[FSR-NG] Cleaning up and shutting down gracefully...\n";
+    imgui.Shutdown();
     overlay.Show(false);
     capture.Stop();
 

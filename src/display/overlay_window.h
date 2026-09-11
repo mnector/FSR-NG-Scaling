@@ -27,9 +27,12 @@ public:
     int height() const { return height_; }
     bool isVisible() const { return isVisible_; }
 
-    // Callback for window events (resize, close, hotkeys)
+    // Callback for window events (resize, close, hotkeys, UI interaction)
     void SetCloseCallback(std::function<void()> cb) { onClose_ = std::move(cb); }
     void SetHotKeyCallback(std::function<void(WPARAM, LPARAM)> cb) { onHotKey_ = std::move(cb); }
+    void SetMsgCallback(std::function<bool(HWND, UINT, WPARAM, LPARAM)> cb) { onMsg_ = std::move(cb); }
+
+    bool isClickThrough() const { return clickThrough_; }
 
 private:
     static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -42,6 +45,7 @@ private:
     bool clickThrough_ = true;
     std::function<void()> onClose_;
     std::function<void(WPARAM, LPARAM)> onHotKey_;
+    std::function<bool(HWND, UINT, WPARAM, LPARAM)> onMsg_;
 };
 
 } // namespace fsrng

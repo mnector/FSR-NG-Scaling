@@ -17,7 +17,7 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
     auto* self = reinterpret_cast<OverlayWindow*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
 
     if (self && self->onMsg_) {
-        if (self->onMsg_(hwnd, msg, wParam, lParam)) {
+        if (msg != WM_NCHITTEST && self->onMsg_(hwnd, msg, wParam, lParam)) {
             return 0;
         }
     }
@@ -31,14 +31,15 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
             return 0;
 
         case WM_NCHITTEST: {
-            if (self && self->onHitTest_) {
-                int screenX = static_cast<short>(LOWORD(lParam));
-                int screenY = static_cast<short>(HIWORD(lParam));
-                if (self->onHitTest_(screenX, screenY)) {
+            if (self && !self->clickThrough_ && self->onHitTest_) {
+                POINT pt{ static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam)) };
+                ScreenToClient(hwnd, &pt);
+                if (self->onHitTest_(pt.x, pt.y)) {
                     return HTCLIENT;
                 }
+                return HTTRANSPARENT;
             }
-            return HTTRANSPARENT;
+            return (self && self->clickThrough_) ? HTTRANSPARENT : HTCLIENT;
         }
 
         case WM_HOTKEY:
@@ -83,7 +84,8 @@ bool OverlayWindow::Create(const std::string& title, int width, int height) {
     // - WS_EX_NOACTIVATE: Never steals keyboard/mouse focus from the game
     // - WS_EX_TOOLWINDOW: Prevents Windows 11 Focus Assist from triggering "No Molestar" (fullscreen gaming mode)
     // - WS_EX_TOPMOST: Stays as an overlay on top of the game
-    DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW;
+    // - WS_EX_TRANSPARENT: Click-through by default until menu is opened
+    DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
     DWORD style = WS_POPUP;
 
     std::wstring wTitle(title.begin(), title.end());

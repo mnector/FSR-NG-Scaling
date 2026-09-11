@@ -4,6 +4,7 @@
 #include <dxgi1_6.h>
 #include <wrl/client.h>
 #include <string>
+#include <functional>
 #include "neural_engine/d3d12_compute_engine.h"
 
 namespace fsrng {
@@ -23,8 +24,16 @@ public:
     void Render(ID3D12GraphicsCommandList* cmdList, ScaleParams& params, float fps, uint64_t frameCount, int width, int height);
 
     bool isVisible() const { return visible_; }
-    void SetVisible(bool visible) { visible_ = visible; }
-    void ToggleVisibility() { visible_ = !visible_; }
+    void SetVisible(bool visible) {
+        if (visible_ != visible) {
+            visible_ = visible;
+            if (onVisibilityChanged_) {
+                onVisibilityChanged_(visible_);
+            }
+        }
+    }
+    void ToggleVisibility() { SetVisible(!visible_); }
+    void SetVisibilityChangedCallback(std::function<void(bool)> cb) { onVisibilityChanged_ = std::move(cb); }
 
     bool IsPointInsideMenu(int x, int y) const {
         if (!visible_) return false;
@@ -33,6 +42,7 @@ public:
     }
 
 private:
+    std::function<void(bool)> onVisibilityChanged_;
     void SetupDarkTheme();
 
     HWND hwnd_ = nullptr;

@@ -185,6 +185,19 @@ int main(int argc, char* argv[]) {
         return imgui.ProcessMessage(h, m, w, l);
     });
 
+    imgui.SetVisibilityChangedCallback([&](bool visible) {
+        overlay.SetClickThrough(!visible);
+        if (visible) {
+            SetForegroundWindow(overlay.hwnd());
+            SetActiveWindow(overlay.hwnd());
+        }
+        std::cout << "\n[GUI] DLSS 5 GUI Menu: "
+                  << (visible ? "OPEN (Interactive)" : "CLOSED (Click-Through)") << std::endl;
+    });
+
+    // Start with overlay in full click-through mode
+    overlay.SetClickThrough(true);
+
     // 7. Register Global Hotkeys
     HotkeyManager hotkeys(overlay.hwnd());
     overlay.SetHotKeyCallback([&](WPARAM w, LPARAM l) {
@@ -198,8 +211,6 @@ int main(int argc, char* argv[]) {
     // Insert or Home: Toggle DLSS 5 Neural Rendering GUI menu
     auto toggleGuiMenu = [&]() {
         imgui.ToggleVisibility();
-        std::cout << "\n[Hotkey] DLSS 5 GUI Menu: "
-                  << (imgui.isVisible() ? "OPEN (Interactive)" : "CLOSED (Hidden)") << std::endl;
     };
     hotkeys.Register(VK_INSERT, 0, toggleGuiMenu);
     hotkeys.Register(VK_HOME, 0, toggleGuiMenu);

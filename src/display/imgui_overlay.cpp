@@ -248,6 +248,10 @@ void ImGuiOverlay::Render(ID3D12GraphicsCommandList* cmdList, ScaleParams& param
     }
     ImGui::End();
 
+    if (!visible_ && onVisibilityChanged_) {
+        onVisibilityChanged_(false);
+    }
+
     ImGui::Render();
 
     ID3D12DescriptorHeap* heaps[] = { srvHeap_.Get() };

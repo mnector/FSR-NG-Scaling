@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
     int   toggleKey             = config.GetInt("toggle_key", 83); // 'S'
     int   reloadKey             = config.GetInt("reload_key", 82); // 'R'
     int   toggleModeKey         = config.GetInt("toggle_mode_key", 87); // 'W'
-    std::string captureMode     = config.GetString("capture_mode", "window");
+    std::string captureMode     = config.GetString("capture_mode", "desktop");
     std::string modelPath       = config.GetString("model_path", "models/fsr_ng_model.safetensors");
     std::string expectedSha     = config.GetString("expected_sha256", "");
 
@@ -73,6 +73,11 @@ int main(int argc, char* argv[]) {
     std::cout << "[Config] Initial Capture Mode: " << captureMode << "\n";
     std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "\n";
 
+    // 1.5 Load OptiScaler Early to ensure DXGI/D3D12 hooks are established before device creation
+    NgxInterop ngx;
+    ngx.ProbeAndInitialize(nullptr);
+    std::cout << "[Engine] " << ngx.statusMessage() << std::endl;
+
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
     NeuralUpscaler upscaler;
     std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline...\n";
@@ -85,11 +90,6 @@ int main(int argc, char* argv[]) {
     ID3D12Device* device = upscaler.engine().device();
     ID3D12CommandQueue* computeQueue = upscaler.engine().queue();
     ID3D12CommandQueue* directQueue  = upscaler.engine().directQueue();
-
-    // 2.1 Probe NVIDIA NGX DLSS-NR dynamic library & fallback gracefully to OpenNR SafeTensors
-    NgxInterop ngx;
-    ngx.ProbeAndInitialize(device);
-    std::cout << "[Engine] " << ngx.statusMessage() << std::endl;
 
     // 3. Command Allocator and List for Compute Dispatches
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> computeAlloc;

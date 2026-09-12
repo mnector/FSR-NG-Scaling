@@ -12,11 +12,6 @@ NgxInterop::~NgxInterop() {
 }
 
 bool NgxInterop::ProbeAndInitialize(ID3D12Device* device, const std::string& dllPath) {
-    if (!device) {
-        statusMessage_ = "Invalid D3D12 device";
-        return false;
-    }
-
     hModule_ = LoadLibraryA(dllPath.c_str());
     if (!hModule_) {
         // Fallback to local backend directory

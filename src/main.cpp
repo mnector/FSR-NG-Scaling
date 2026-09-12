@@ -9,7 +9,6 @@
 #include "capture/capture_manager.h"
 #include "neural_engine/neural_upscaler.h"
 #include "display/overlay_window.h"
-#include "display/emoji_widget.h"
 #include "display/swapchain_presenter.h"
 #include "utils/config_reader.h"
 #include "utils/hotkey_manager.h"
@@ -129,7 +128,7 @@ int main(int argc, char* argv[]) {
     overlay.SetHotKeyCallback([&](WPARAM w, LPARAM l) {
         hotkeys.OnHotKey(w, l);
     });
-    std::atomic<bool> scalingActive{ true };
+    std::atomic<bool> scalingActive{ false }; // Disabled by default so mouse works
     std::atomic<bool> windowModeActive{ false }; // Disabled per user request
     HWND lastForegroundHwnd = nullptr;
     std::string currentTargetTitle = "Desktop";
@@ -148,7 +147,7 @@ int main(int argc, char* argv[]) {
         upscaler.params.intensity             = config.GetFloat("intensity", 1.00f);
         upscaler.params.splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
         std::string newMode = config.GetString("capture_mode", "desktop");
-        windowModeActive = (newMode == "window");
+        windowModeActive = false; // Forced false
         upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
                   << " Intensity=" << upscaler.params.intensity
@@ -156,11 +155,11 @@ int main(int argc, char* argv[]) {
                   << " SplitScreen=" << upscaler.params.splitScreen << std::endl;
     });
 
-    overlay.Show(true);
+    overlay.Show(false);
     std::cout << "\n=========================================================\n"
-              << "  FSR-NG Active! Controls:\n"
+              << "  FSR-NG Active! (STARTED HIDDEN)\n"
+              << "  Controls:\n"
               << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n"
-              << "  * [Ctrl + Alt + W] : Toggle Window vs Desktop mode\n"
               << "  * [Ctrl + C]       : Exit application\n"
               << "=========================================================\n\n";
 

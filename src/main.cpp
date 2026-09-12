@@ -130,8 +130,29 @@ int main(int argc, char* argv[]) {
     });
     std::atomic<bool> scalingActive{ false }; // Disabled by default so mouse works
     std::atomic<bool> windowModeActive{ false }; // Disabled per user request
+    std::atomic<bool> menuModeActive{ false }; // False = Game Mode (Click-through)
     HWND lastForegroundHwnd = nullptr;
     std::string currentTargetTitle = "Desktop";
+
+    // Initialize as Click-Through (Game Mode)
+    overlay.SetClickThrough(true);
+
+    // Ctrl+Alt+M: Toggle Menu Mode (Interact with OptiScaler GUI)
+    hotkeys.Register('M', HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
+        menuModeActive = !menuModeActive.load();
+        overlay.SetClickThrough(!menuModeActive.load());
+        
+        if (menuModeActive.load()) {
+            std::cout << "\n[Hotkey] MENU MODE: Mouse unlocked for OptiScaler GUI. (Game clicks BLOCKED)" << std::endl;
+            // Also force overlay to be visible so they can see the menu
+            if (!scalingActive.load()) {
+                scalingActive = true;
+                overlay.Show(true);
+            }
+        } else {
+            std::cout << "\n[Hotkey] GAME MODE: Mouse click-through ENABLED. (GUI will be invisible)" << std::endl;
+        }
+    });
 
     // Ctrl+Alt+S: Toggle live scaling
     hotkeys.Register(toggleKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
@@ -160,6 +181,7 @@ int main(int argc, char* argv[]) {
               << "  FSR-NG Active! (STARTED HIDDEN)\n"
               << "  Controls:\n"
               << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n"
+              << "  * [Ctrl + Alt + M] : Toggle Menu Mode (Mouse) / Game Mode\n"
               << "  * [Ctrl + C]       : Exit application\n"
               << "=========================================================\n\n";
 

@@ -100,8 +100,9 @@ You can control the live FSR-NG-Scaling behavior using the following global hotk
 | Shortcut | Action |
 | :--- | :--- |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | Toggle live scaling (Enable/Disable). |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>M</kbd> | Toggle **Menu Mode** (Unlocks mouse to interact with OptiScaler GUI) and **Game Mode** (Mouse passes through to your game). |
 | <kbd>Ctrl</kbd> + <kbd>C</kbd> | Clean exit and GPU resource release (In terminal). |
-| <kbd>Insert</kbd> | Show/Hide the **OptiScaler / Envy-Diamond native GUI menu** (Ensure the window has focus). |
+| <kbd>Insert</kbd> | Show/Hide the **OptiScaler / Envy-Diamond native GUI menu** (Use Ctrl+Alt+M first to unlock mouse!). |
 
 ---
 

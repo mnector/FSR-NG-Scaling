@@ -79,8 +79,9 @@ bool OverlayWindow::Create(const std::string& title, int width, int height) {
     width_ = screenW;
     height_ = screenH;
 
-    // Standard Game Window (Borderless Fullscreen)
-    DWORD exStyle = 0;
+    // Start as Click-Through Ghost (Game Mode)
+    // WS_EX_LAYERED | WS_EX_TRANSPARENT ensures mouse passes through.
+    DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT;
     DWORD style = WS_POPUP;
 
     std::wstring wTitle(title.begin(), title.end());
@@ -132,7 +133,15 @@ void OverlayWindow::SetPositionAndSize(int x, int y, int w, int h) {
 }
 
 void OverlayWindow::SetClickThrough(bool enable) {
-    // Disabled since it's now a standard game window
+    if (!hwnd_) return;
+    clickThrough_ = enable;
+    LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
+    if (enable) {
+        exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT);
+    } else {
+        exStyle &= ~(WS_EX_LAYERED | WS_EX_TRANSPARENT);
+    }
+    SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle);
 }
 
 bool OverlayWindow::ProcessMessages() {

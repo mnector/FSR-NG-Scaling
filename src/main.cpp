@@ -9,6 +9,7 @@
 #include "capture/capture_manager.h"
 #include "neural_engine/neural_upscaler.h"
 #include "display/overlay_window.h"
+#include "display/emoji_widget.h"
 #include "display/swapchain_presenter.h"
 #include "utils/config_reader.h"
 #include "utils/hotkey_manager.h"
@@ -56,7 +57,7 @@ int main(int argc, char* argv[]) {
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
     NeuralUpscaler upscaler;
     std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline...\n";
-    if (!upscaler.Initialize("shaders/neural_scale_cs.hlsl")) {
+    if (!upscaler.Initialize()) {
         std::cerr << "[Engine] ERROR: " << upscaler.error() << std::endl;
         return 1;
     }
@@ -66,28 +67,12 @@ int main(int argc, char* argv[]) {
     ID3D12CommandQueue* computeQueue = upscaler.engine().queue();
     ID3D12CommandQueue* directQueue  = upscaler.engine().directQueue();
 
-    // 3. Command Allocator and List for Compute Dispatches
-    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> computeAlloc;
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> computeCmd;
-    HRESULT hr = device->CreateCommandAllocator(
-        D3D12_COMMAND_LIST_TYPE_COMPUTE,
-        IID_PPV_ARGS(computeAlloc.GetAddressOf())
-    );
-    if (FAILED(hr)) {
-        device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(computeAlloc.GetAddressOf()));
-    }
-
-    hr = device->CreateCommandList(
-        0,
-        D3D12_COMMAND_LIST_TYPE_COMPUTE,
-        computeAlloc.Get(),
-        nullptr,
-        IID_PPV_ARGS(computeCmd.GetAddressOf())
-    );
-    if (FAILED(hr)) {
-        device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, computeAlloc.Get(), nullptr, IID_PPV_ARGS(computeCmd.GetAddressOf()));
-    }
-    computeCmd->Close();
+    // 3. Command Allocator and List
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> directAlloc;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> directCmd;
+    device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(directAlloc.GetAddressOf()));
+    device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, directAlloc.Get(), nullptr, IID_PPV_ARGS(directCmd.GetAddressOf()));
+    directCmd->Close();
 
     // 4. Initialize Capture Engine via DXGI Output Duplication
     CaptureManager capture;
@@ -114,6 +99,8 @@ int main(int argc, char* argv[]) {
         targetHeight = capHeight * scaleFactor;
     }
 
+    // EmojiWidget disabled per user request
+
     OverlayWindow overlay;
     std::cout << "[Display] Creating borderless topmost overlay...\n";
     if (!overlay.Create("FSR-NG-Overlay", capWidth, capHeight)) {
@@ -129,7 +116,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Allocate neural upscaler resources
-    upscaler.Resize(capWidth, capHeight, capWidth, capHeight);
+    upscaler.Resize(capWidth, capHeight, capWidth, capHeight, presenter.format());
     upscaler.params.intensity = intensity;
     upscaler.params.splitScreen = splitScreen;
     upscaler.params.resetHistory = 1.0f;
@@ -143,7 +130,7 @@ int main(int argc, char* argv[]) {
         hotkeys.OnHotKey(w, l);
     });
     std::atomic<bool> scalingActive{ true };
-    std::atomic<bool> windowModeActive{ captureMode == "window" };
+    std::atomic<bool> windowModeActive{ false }; // Disabled per user request
     HWND lastForegroundHwnd = nullptr;
     std::string currentTargetTitle = "Desktop";
 
@@ -153,15 +140,6 @@ int main(int argc, char* argv[]) {
         overlay.Show(scalingActive.load());
         upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Scaling toggled: " << (scalingActive.load() ? "ENABLED (Visible)" : "DISABLED (Hidden)") << std::endl;
-    });
-
-    // Ctrl+Alt+W: Toggle between Dynamic Foreground Window and Full Desktop
-    hotkeys.Register(toggleModeKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
-        windowModeActive = !windowModeActive.load();
-        upscaler.ResetHistory();
-        std::cout << "\n[Hotkey] Capture mode toggled: "
-                  << (windowModeActive.load() ? "DYNAMIC ACTIVE WINDOW (Borderless Upscale)" : "FULL MONITOR DESKTOP")
-                  << std::endl;
     });
 
     // Ctrl+Alt+R: Live reload settings.ini
@@ -179,14 +157,12 @@ int main(int argc, char* argv[]) {
     });
 
     overlay.Show(true);
-    std::cout << "\n=========================================================\n";
-    std::cout << "  FSR-NG Active! Controls:\n";
-    std::cout << "  * [Insert] / [Home]: Toggle DLSS 5 Neural Rendering GUI menu\n";
-    std::cout << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n";
-    std::cout << "  * [Ctrl + Alt + W] : Toggle Window vs Desktop mode\n";
-    std::cout << "  * [Ctrl + Alt + R] : Reload settings.ini live\n";
-    std::cout << "  * [Ctrl + C]       : Exit application\n";
-    std::cout << "=========================================================\n\n";
+    std::cout << "\n=========================================================\n"
+              << "  FSR-NG Active! Controls:\n"
+              << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n"
+              << "  * [Ctrl + Alt + W] : Toggle Window vs Desktop mode\n"
+              << "  * [Ctrl + C]       : Exit application\n"
+              << "=========================================================\n\n";
 
 
     // 8. Main Render Loop
@@ -196,6 +172,7 @@ int main(int argc, char* argv[]) {
     float currentFps = 0.0f;
 
     while (g_running.load()) {
+        //emoji.Update();
         if (!overlay.ProcessMessages()) {
             break; // WM_QUIT
         }
@@ -206,31 +183,49 @@ int main(int argc, char* argv[]) {
         }
 
         // A. Handle Dynamic Foreground Window Crop
+        int currentInputW = capWidth;
+        int currentInputH = capHeight;
+        int currentX = 0;
+        int currentY = 0;
+
         if (windowModeActive.load()) {
             WindowClientInfo wInfo = capture.GetForegroundClientArea(overlay.hwnd());
-            if (wInfo.valid && capWidth > 0 && capHeight > 0) {
-                float cropX = std::clamp(static_cast<float>(wInfo.x) / static_cast<float>(capWidth), 0.0f, 1.0f);
-                float cropY = std::clamp(static_cast<float>(wInfo.y) / static_cast<float>(capHeight), 0.0f, 1.0f);
-                float cropW = std::clamp(static_cast<float>(wInfo.width) / static_cast<float>(capWidth), 0.01f, 1.0f);
-                float cropH = std::clamp(static_cast<float>(wInfo.height) / static_cast<float>(capHeight), 0.01f, 1.0f);
-
-                upscaler.params.captureCrop = float4{ cropX, cropY, cropW, cropH };
-                upscaler.params.modeWindow = 1.0f;
+            if (wInfo.valid) {
+                currentInputW = std::clamp<int>(static_cast<int>(wInfo.width), 16, capWidth);
+                currentInputH = std::clamp<int>(static_cast<int>(wInfo.height), 16, capHeight);
+                currentX = wInfo.x;
+                currentY = wInfo.y;
 
                 if (wInfo.hwnd != lastForegroundHwnd) {
                     lastForegroundHwnd = wInfo.hwnd;
                     currentTargetTitle = wInfo.title.empty() ? "Target Window" : wInfo.title;
                     upscaler.ResetHistory();
                     std::cout << "\n[Target Window] Active: \"" << currentTargetTitle
-                              << "\" (" << wInfo.width << "x" << wInfo.height << ")" << std::endl;
+                              << "\" (" << currentInputW << "x" << currentInputH << ")" << std::endl;
                 }
-            } else {
-                upscaler.params.modeWindow = 0.0f;
-                upscaler.params.captureCrop = float4{ 0.0f, 0.0f, 1.0f, 1.0f };
             }
         } else {
-            upscaler.params.modeWindow = 0.0f;
-            upscaler.params.captureCrop = float4{ 0.0f, 0.0f, 1.0f, 1.0f };
+            lastForegroundHwnd = nullptr;
+        }
+
+        int currentOutputW = GetSystemMetrics(SM_CXSCREEN);
+        int currentOutputH = GetSystemMetrics(SM_CYSCREEN);
+        int overlayX = 0;
+        int overlayY = 0;
+
+        if (!windowModeActive.load()) {
+            currentInputW = capWidth;
+            currentInputH = capHeight;
+            currentX = 0;
+            currentY = 0;
+        }
+
+        if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight()) {
+            upscaler.Resize(currentInputW, currentInputH, currentOutputW, currentOutputH, presenter.format());
+            overlay.SetPositionAndSize(overlayX, overlayY, currentOutputW, currentOutputH);
+            presenter.Resize(currentOutputW, currentOutputH);
+        } else if (windowModeActive.load()) {
+            overlay.SetPositionAndSize(overlayX, overlayY, currentOutputW, currentOutputH);
         }
 
         // B. Acquire frame from GPU VRAM
@@ -241,14 +236,14 @@ int main(int argc, char* argv[]) {
         }
 
         // C. Execute Neural Upscaler Compute Pass
-        computeAlloc->Reset();
-        computeCmd->Reset(computeAlloc.Get(), nullptr);
+        directAlloc->Reset();
+        directCmd->Reset(directAlloc.Get(), nullptr);
 
-        upscaler.Process(computeCmd.Get(), inputFrame);
+        upscaler.Process(directCmd.Get(), inputFrame, currentX, currentY);
 
-        computeCmd->Close();
-        ID3D12CommandList* lists[] = { computeCmd.Get() };
-        computeQueue->ExecuteCommandLists(1, lists);
+        directCmd->Close();
+        ID3D12CommandList* lists[] = { directCmd.Get() };
+        directQueue->ExecuteCommandLists(1, lists);
 
         totalFramesRendered++;
 

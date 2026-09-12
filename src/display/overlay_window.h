@@ -19,6 +19,8 @@ public:
     // Set click-through (pass input through to underlying game)
     void SetClickThrough(bool enable);
 
+    void SetPositionAndSize(int x, int y, int w, int h);
+
     // Process pending Windows messages. Returns false on WM_QUIT
     bool ProcessMessages();
 

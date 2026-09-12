@@ -12,6 +12,11 @@ D3D12ComputeEngine::~D3D12ComputeEngine() = default;
 bool D3D12ComputeEngine::Initialize(int adapterIndex) {
     HRESULT hr = S_OK;
 
+    // Microsoft::WRL::ComPtr<ID3D12Debug> debugController;
+    // if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+    //     debugController->EnableDebugLayer();
+    // }
+
     Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
     hr = CreateDXGIFactory1(IID_PPV_ARGS(factory.GetAddressOf()));
     if (FAILED(hr)) {

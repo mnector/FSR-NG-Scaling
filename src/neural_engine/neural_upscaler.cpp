@@ -1,176 +1,287 @@
 #include "neural_upscaler.h"
 #include <iostream>
-#include <iomanip>
 
 namespace fsrng {
 
-NeuralUpscaler::NeuralUpscaler() = default;
-NeuralUpscaler::~NeuralUpscaler() = default;
+NeuralUpscaler::NeuralUpscaler() {
+    memset(&params, 0, sizeof(ScaleParams));
+}
 
-bool NeuralUpscaler::Initialize(const std::string& hlslPath) {
+NeuralUpscaler::~NeuralUpscaler() {
+    ShutdownNGX();
+}
+
+void NeuralUpscaler::ShutdownNGX() {
+    if (ngxFeature_ && pfnReleaseFeature) {
+        pfnReleaseFeature(ngxFeature_);
+        ngxFeature_ = nullptr;
+    }
+    if (ngxParameters_ && pfnDestroyParams) {
+        pfnDestroyParams(ngxParameters_);
+        ngxParameters_ = nullptr;
+    }
+    if (pfnShutdown) {
+        pfnShutdown();
+    }
+    if (hNvngx_) {
+        FreeLibrary(hNvngx_);
+        hNvngx_ = nullptr;
+    }
+}
+
+bool NeuralUpscaler::Initialize() {
     if (!engine_.Initialize()) {
-        error_ = "Failed to initialize D3D12ComputeEngine: " + engine_.error();
+        error_ = "Failed to initialize D3D12 compute engine.";
         return false;
     }
 
-    if (!engine_.CompileShader(hlslPath)) {
-        error_ = "Failed to compile compute shader: " + engine_.error();
+    hNvngx_ = LoadLibraryA("nvngx.dll");
+    if (!hNvngx_) {
+        // Fallback to OptiScaler
+        hNvngx_ = LoadLibraryA("dxgi.dll");
+        if (!hNvngx_) {
+            error_ = "Failed to load nvngx.dll or dxgi.dll proxy for OptiScaler.";
+            return false;
+        }
+    }
+
+    pfnInit = (PFN_NVSDK_NGX_D3D12_Init_with_ProjectID)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_Init_with_ProjectID");
+    pfnShutdown = (PFN_NVSDK_NGX_D3D12_Shutdown)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_Shutdown");
+    pfnGetCapParams = (PFN_NVSDK_NGX_D3D12_GetCapabilityParameters)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_GetCapabilityParameters");
+    pfnAllocParams = (PFN_NVSDK_NGX_D3D12_AllocateParameters)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_AllocateParameters");
+    pfnDestroyParams = (PFN_NVSDK_NGX_D3D12_DestroyParameters)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_DestroyParameters");
+    pfnCreateFeature = (PFN_NVSDK_NGX_D3D12_CreateFeature)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_CreateFeature");
+    pfnReleaseFeature = (PFN_NVSDK_NGX_D3D12_ReleaseFeature)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_ReleaseFeature");
+    pfnEvaluateFeature = (PFN_NVSDK_NGX_D3D12_EvaluateFeature)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_EvaluateFeature");
+
+    if (!pfnInit || !pfnAllocParams || !pfnCreateFeature || !pfnEvaluateFeature) {
+        error_ = "OptiScaler proxy loaded, but missing DLSS NVSDK NGX exports.";
         return false;
     }
 
-    // Relying on Envy-Diamond (OptiScaler) Engine integration instead of SafeTensors
-    std::cout << "[NeuralUpscaler] Initialized using Envy-Diamond / OptiScaler engine architecture." << std::endl;
+    // Initialize NGX with dummy ProjectID
+    const wchar_t* dataPath = L".";
+    NVSDK_NGX_Result res = pfnInit("FSR-NG", NVSDK_NGX_ENGINE_TYPE_CUSTOM, "1.0", dataPath, engine_.device(), nullptr, (NVSDK_NGX_Version)NVSDK_NGX_VERSION_API_MACRO);
+    if (NVSDK_NGX_FAILED(res)) {
+        error_ = "NVSDK_NGX_D3D12_Init failed.";
+        return false;
+    }
+
+    res = pfnAllocParams(&ngxParameters_);
+    if (NVSDK_NGX_FAILED(res)) {
+        error_ = "NVSDK_NGX_D3D12_AllocateParameters failed.";
+        return false;
+    }
 
     initialized_ = true;
     return true;
 }
 
-
-bool NeuralUpscaler::Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format) {
-    if (inW <= 0 || inH <= 0 || outW <= 0 || outH <= 0) return false;
-    if (inW_ == inW && inH_ == inH && outW_ == outW && outH_ == outH && outputResource_ && historyResource_ && format_ == format) {
-        return true;
-    }
-
-    inW_ = inW;
-    inH_ = inH;
-    outW_ = outW;
-    outH_ = outH;
-    format_ = format;
-
-    params.inSize  = float2{ static_cast<float>(inW), static_cast<float>(inH) };
-    params.outSize = float2{ static_cast<float>(outW), static_cast<float>(outH) };
-
-    ID3D12Device* device = engine_.device();
-    if (!device) return false;
-
-    outputResource_.Reset();
-    historyResource_.Reset();
-
-    // 1. Create Output UAV Resource
-    D3D12_RESOURCE_DESC desc{};
+bool NeuralUpscaler::CreateDummyTextures(int w, int h) {
+    D3D12_RESOURCE_DESC desc = {};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-    desc.Alignment = 0;
-    desc.Width = outW;
-    desc.Height = outH;
+    desc.Width = w;
+    desc.Height = h;
+    desc.DepthOrArraySize = 1;
+    desc.MipLevels = 1;
+    desc.SampleDesc.Count = 1;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+    D3D12_HEAP_PROPERTIES heapProps = {};
+    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    // Motion Vectors (R16G16_FLOAT)
+    desc.Format = DXGI_FORMAT_R16G16_FLOAT;
+    if (FAILED(engine_.device()->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&dummyMVs_)))) {
+        return false;
+    }
+    dummyMVs_->SetName(L"Dummy Motion Vectors");
+
+    // Depth (R32_FLOAT)
+    desc.Format = DXGI_FORMAT_R32_FLOAT;
+    if (FAILED(engine_.device()->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&dummyDepth_)))) {
+        return false;
+    }
+    dummyDepth_->SetName(L"Dummy Depth");
+
+    // Dummy textures remain uninitialized. FSR2 will use them as zero/garbage.
+    return true;
+}
+
+void NeuralUpscaler::CreateOutputResource(int w, int h, DXGI_FORMAT format) {
+    D3D12_RESOURCE_DESC desc = {};
+    desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    desc.Width = w;
+    desc.Height = h;
     desc.DepthOrArraySize = 1;
     desc.MipLevels = 1;
     desc.Format = format;
     desc.SampleDesc.Count = 1;
-    desc.SampleDesc.Quality = 0;
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS | D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
 
-    D3D12_HEAP_PROPERTIES heapProps{};
+    D3D12_HEAP_PROPERTIES heapProps = {};
     heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
-    heapProps.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-    heapProps.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
-    HRESULT hr = device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &desc,
-        D3D12_RESOURCE_STATE_COMMON,
-        nullptr,
-        IID_PPV_ARGS(outputResource_.GetAddressOf())
+    HRESULT hr = engine_.device()->CreateCommittedResource(
+        &heapProps, D3D12_HEAP_FLAG_NONE, &desc,
+        D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr,
+        IID_PPV_ARGS(&outputResource_)
     );
+    if (SUCCEEDED(hr) && outputResource_) {
+        outputResource_->SetName(L"NeuralUpscaler Output Resource");
+    } else {
+        std::cerr << "[NeuralUpscaler] Failed to create Output Resource! HR: " << hr << std::endl;
+    }
+}
 
-    if (FAILED(hr)) {
-        error_ = "Failed to create output UAV texture: " + std::to_string(hr);
+bool NeuralUpscaler::Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format) {
+    if (inW == inW_ && inH == inH_ && outW == outW_ && outH == outH_ && format == format_) return true;
+    inW_ = inW; inH_ = inH; outW_ = outW; outH_ = outH; format_ = format;
+
+    if (ngxFeature_) {
+        if (pfnReleaseFeature) pfnReleaseFeature(ngxFeature_);
+        ngxFeature_ = nullptr;
+    }
+
+    CreateDummyTextures(inW, inH);
+    CreateOutputResource(outW, outH, format);
+
+    // Create Crop Resource
+    D3D12_RESOURCE_DESC cropDesc = {};
+    cropDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    cropDesc.Width = inW;
+    cropDesc.Height = inH;
+    cropDesc.DepthOrArraySize = 1;
+    cropDesc.MipLevels = 1;
+    cropDesc.SampleDesc.Count = 1;
+    cropDesc.Flags = D3D12_RESOURCE_FLAG_NONE; // Can be a regular texture
+    cropDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    cropDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+
+    D3D12_HEAP_PROPERTIES heapProps = {};
+    heapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    HRESULT hrCrop = engine_.device()->CreateCommittedResource(
+        &heapProps, D3D12_HEAP_FLAG_NONE, &cropDesc,
+        D3D12_RESOURCE_STATE_COMMON, nullptr, IID_PPV_ARGS(&cropResource_));
+        
+    if (SUCCEEDED(hrCrop) && cropResource_) {
+        cropResource_->SetName(L"NeuralUpscaler Crop Resource");
+    } else {
+        std::cerr << "[NeuralUpscaler] Failed to create Crop Resource! HR: " << hrCrop << std::endl;
+    }
+
+    // Create DLSS Feature
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Width, inW);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Height, inH);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_OutWidth, outW);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_OutHeight, outH);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_PerfQualityValue, NVSDK_NGX_PerfQuality_Value_MaxQuality);
+
+    // We must create a temporary command list for feature creation
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> alloc;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmd;
+    engine_.device()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&alloc));
+    engine_.device()->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, alloc.Get(), nullptr, IID_PPV_ARGS(&cmd));
+
+    TransitionResource(cmd.Get(), dummyMVs_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    TransitionResource(cmd.Get(), dummyDepth_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+
+    NVSDK_NGX_Result res = pfnCreateFeature(cmd.Get(), NVSDK_NGX_Feature_SuperSampling, ngxParameters_, &ngxFeature_);
+    
+    cmd->Close();
+    ID3D12CommandList* lists[] = { cmd.Get() };
+    engine_.directQueue()->ExecuteCommandLists(1, lists);
+    
+    // Wait for idle
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence;
+    engine_.device()->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&fence));
+    HANDLE event = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+    engine_.directQueue()->Signal(fence.Get(), 1);
+    fence->SetEventOnCompletion(1, event);
+    WaitForSingleObject(event, INFINITE);
+    CloseHandle(event);
+
+    if (NVSDK_NGX_FAILED(res)) {
+        error_ = "NVSDK_NGX_D3D12_CreateFeature failed.";
         return false;
     }
 
-    // 2. Create History Resource for Temporal Accumulation ($S_{t-1}$)
-    D3D12_RESOURCE_DESC histDesc = desc;
-    histDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
-
-    hr = device->CreateCommittedResource(
-        &heapProps,
-        D3D12_HEAP_FLAG_NONE,
-        &histDesc,
-        D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE,
-        nullptr,
-        IID_PPV_ARGS(historyResource_.GetAddressOf())
-    );
-
-    if (FAILED(hr)) {
-        error_ = "Failed to create history texture: " + std::to_string(hr);
-        return false;
-    }
-
-    // First frame must reset history
-    params.resetHistory = 1.0f;
     return true;
 }
 
-void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inputResource) {
-    if (!initialized_ || !cmd || !inputResource || !outputResource_) return;
+void NeuralUpscaler::TransitionResource(ID3D12GraphicsCommandList* cmd, ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after) {
+    if (before == after) return;
+    D3D12_RESOURCE_BARRIER barrier = {};
+    barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barrier.Transition.pResource = res;
+    barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barrier.Transition.StateBefore = before;
+    barrier.Transition.StateAfter = after;
+    cmd->ResourceBarrier(1, &barrier);
+}
 
-    params.inSize  = float2{ static_cast<float>(inW_), static_cast<float>(inH_) };
-    params.outSize = float2{ static_cast<float>(outW_), static_cast<float>(outH_) };
+void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inputResource, int cropX, int cropY) {
+    if (!initialized_ || !ngxFeature_ || !inputResource) return;
 
-    // 1. Transition output texture from COMMON to UNORDERED_ACCESS
-    D3D12_RESOURCE_BARRIER preBarrier{};
-    preBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-    preBarrier.Transition.pResource = outputResource_.Get();
-    preBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-    preBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-    preBarrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-    cmd->ResourceBarrier(1, &preBarrier);
+    D3D12_RESOURCE_DESC inDesc = inputResource->GetDesc();
+    ID3D12Resource* activeInput = inputResource;
 
-    // 2. Execute Compute Shader Pass with history input
-    engine_.Upscale(cmd, inputResource, historyResource_.Get(), outputResource_.Get(), params);
+    if (inDesc.Width != inW_ || inDesc.Height != inH_) {
+        // We need to crop from inputResource to cropResource_
+        TransitionResource(cmd, inputResource, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        TransitionResource(cmd, cropResource_.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_COPY_DEST);
 
-    // Reset single-frame history reset flag
-    if (params.resetHistory > 0.5f) {
-        params.resetHistory = 0.0f;
+        D3D12_TEXTURE_COPY_LOCATION dst = {};
+        dst.pResource = cropResource_.Get();
+        dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        dst.SubresourceIndex = 0;
+
+        D3D12_TEXTURE_COPY_LOCATION src = {};
+        src.pResource = inputResource;
+        src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+        src.SubresourceIndex = 0;
+
+        D3D12_BOX box = {};
+        box.left = cropX;
+        box.top = cropY;
+        box.right = cropX + inW_;
+        box.bottom = cropY + inH_;
+        box.front = 0;
+        box.back = 1;
+
+        cmd->CopyTextureRegion(&dst, 0, 0, 0, &src, &box);
+
+        TransitionResource(cmd, cropResource_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        TransitionResource(cmd, inputResource, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+
+        activeInput = cropResource_.Get();
+    } else {
+        TransitionResource(cmd, activeInput, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     }
 
-    // 3. Copy output to history buffer for next frame and transition to COMMON for presentation
-    if (historyResource_) {
-        D3D12_RESOURCE_BARRIER copyBarriers[2]{};
-        // Output: UNORDERED_ACCESS -> COPY_SOURCE
-        copyBarriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        copyBarriers[0].Transition.pResource = outputResource_.Get();
-        copyBarriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        copyBarriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        copyBarriers[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_SOURCE;
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Color, activeInput);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Output, outputResource_.Get());
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Depth, dummyDepth_.Get());
+    ngxParameters_->Set(NVSDK_NGX_Parameter_MotionVectors, dummyMVs_.Get());
+    ngxParameters_->Set(NVSDK_NGX_Parameter_MV_Scale_X, 1.0f);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_MV_Scale_Y, 1.0f);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Jitter_Offset_X, 0.0f);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Jitter_Offset_Y, 0.0f);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Width, inW_);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_DLSS_Render_Subrect_Dimensions_Height, inH_);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_Reset, params.resetHistory > 0.0f ? 1 : 0);
+    
+    params.resetHistory = 0.0f;
 
-        // History: NON_PIXEL_SHADER_RESOURCE -> COPY_DEST
-        copyBarriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        copyBarriers[1].Transition.pResource = historyResource_.Get();
-        copyBarriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        copyBarriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-        copyBarriers[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_COPY_DEST;
+    pfnEvaluateFeature(cmd, ngxFeature_, ngxParameters_, nullptr);
 
-        cmd->ResourceBarrier(2, copyBarriers);
-
-        cmd->CopyResource(historyResource_.Get(), outputResource_.Get());
-
-        D3D12_RESOURCE_BARRIER postBarriers[2]{};
-        // History: COPY_DEST -> NON_PIXEL_SHADER_RESOURCE
-        postBarriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        postBarriers[0].Transition.pResource = historyResource_.Get();
-        postBarriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        postBarriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        postBarriers[0].Transition.StateAfter  = D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE;
-
-        // Output: COPY_SOURCE -> COMMON
-        postBarriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        postBarriers[1].Transition.pResource = outputResource_.Get();
-        postBarriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        postBarriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        postBarriers[1].Transition.StateAfter  = D3D12_RESOURCE_STATE_COMMON;
-
-        cmd->ResourceBarrier(2, postBarriers);
+    if (activeInput == cropResource_.Get()) {
+        TransitionResource(cmd, activeInput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     } else {
-        D3D12_RESOURCE_BARRIER postBarrier{};
-        postBarrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        postBarrier.Transition.pResource = outputResource_.Get();
-        postBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        postBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
-        postBarrier.Transition.StateAfter  = D3D12_RESOURCE_STATE_COMMON;
-        cmd->ResourceBarrier(1, &postBarrier);
+        TransitionResource(cmd, activeInput, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
     }
 }
 

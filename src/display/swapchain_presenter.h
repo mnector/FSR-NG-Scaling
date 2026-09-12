@@ -27,6 +27,7 @@ public:
 
     int width() const { return width_; }
     int height() const { return height_; }
+    DXGI_FORMAT format() const { return format_; }
     const std::string& error() const { return error_; }
 
 private:
@@ -52,6 +53,7 @@ private:
 
     int width_ = 0;
     int height_ = 0;
+    DXGI_FORMAT format_ = DXGI_FORMAT_R8G8B8A8_UNORM;
     std::string error_;
 };
 

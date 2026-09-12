@@ -31,7 +31,7 @@
 *   🛡️ **Zero Process Injection:** Doesn't use wrappers or invasively modify game memory. It extracts frames directly via DXGI Desktop Duplication.
 *   🚀 **Envy-Diamond Engine (OptiScaler):** Takes advantage of multi-pass neural rendering technology for AMD GPUs, natively integrated into the application's pipeline.
 *   ⏱️ **Temporal Accumulation & Hysteresis:** Includes a history buffer that suppresses ghosting through local AABB clamping.
-*   ⚡ **Ultra-Low Latency Overlay:** Topmost transparent window utilizing a Flip Discard SwapChain with screen tearing support.
+*   🎮 **Standard Game Overlay:** Acts as a standard borderless window to natively support Envy-Diamond / OptiScaler hooks and GUI overlays perfectly.
 
 ---
 
@@ -99,11 +99,9 @@ You can control the live FSR-NG-Scaling behavior using the following global hotk
 
 | Shortcut | Action |
 | :--- | :--- |
-| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | Toggle live scaling (Enable/Disable Overlay). |
-| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>W</kbd> | Toggle between **Dynamic Active Window** mode and **Full Desktop** mode. |
-| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>R</kbd> | Hot-reload `config/settings.ini` without restarting the app. |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | Toggle live scaling (Enable/Disable). |
 | <kbd>Ctrl</kbd> + <kbd>C</kbd> | Clean exit and GPU resource release (In terminal). |
-| <kbd>Insert</kbd> / <kbd>Home</kbd> | Show/Hide the **OptiScaler / Envy-Diamond native GUI menu**. |
+| <kbd>Insert</kbd> | Show/Hide the **OptiScaler / Envy-Diamond native GUI menu** (Ensure the window has focus). |
 
 ---
 

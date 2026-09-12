@@ -79,13 +79,8 @@ bool OverlayWindow::Create(const std::string& title, int width, int height) {
     width_ = screenW;
     height_ = screenH;
 
-    // Extended styles:
-    // - WS_EX_LAYERED: Enables GPU alpha blending and non-intrusive compositing
-    // - WS_EX_NOACTIVATE: Never steals keyboard/mouse focus from the game
-    // - WS_EX_TOOLWINDOW: Prevents Windows 11 Focus Assist from triggering "No Molestar" (fullscreen gaming mode)
-    // - WS_EX_TOPMOST: Stays as an overlay on top of the game
-    // - WS_EX_TRANSPARENT: Click-through by default until menu is opened
-    DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
+    // Standard Game Window (Borderless Fullscreen)
+    DWORD exStyle = 0;
     DWORD style = WS_POPUP;
 
     std::wstring wTitle(title.begin(), title.end());
@@ -108,7 +103,7 @@ bool OverlayWindow::Create(const std::string& title, int width, int height) {
         return false;
     }
 
-    // Exclude overlay from DXGI / WGC screen capture to prevent recursive black screen
+    // Still exclude from capture to prevent infinite mirror of desktop
     SetWindowDisplayAffinity(hwnd_, 0x00000011); // WDA_EXCLUDEFROMCAPTURE
 
     SetWindowLongPtrW(hwnd_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
@@ -120,23 +115,24 @@ void OverlayWindow::Show(bool visible) {
     if (!hwnd_) return;
     isVisible_ = visible;
     if (visible) {
-        ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
-        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, width_, height_, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        ShowWindow(hwnd_, SW_SHOW);
+        SetForegroundWindow(hwnd_);
+        SetFocus(hwnd_);
     } else {
         ShowWindow(hwnd_, SW_HIDE);
     }
 }
 
-void OverlayWindow::SetClickThrough(bool enable) {
-    if (!hwnd_) return;
-    clickThrough_ = enable;
-    LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
-    if (enable) {
-        exStyle |= WS_EX_TRANSPARENT;
-    } else {
-        exStyle &= ~WS_EX_TRANSPARENT;
+void OverlayWindow::SetPositionAndSize(int x, int y, int w, int h) {
+    if (hwnd_) {
+        SetWindowPos(hwnd_, nullptr, x, y, w, h, SWP_NOZORDER);
+        width_ = w;
+        height_ = h;
     }
-    SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle);
+}
+
+void OverlayWindow::SetClickThrough(bool enable) {
+    // Disabled since it's now a standard game window
 }
 
 bool OverlayWindow::ProcessMessages() {

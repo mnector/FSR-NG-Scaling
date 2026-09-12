@@ -24,6 +24,7 @@ bool SwapchainPresenter::Initialize(HWND hwnd, ID3D12Device* device, ID3D12Comma
     queue_ = directQueue;
     width_ = width;
     height_ = height;
+    format_ = DXGI_FORMAT_R8G8B8A8_UNORM;
 
     HRESULT hr = device_->CreateCommandAllocator(
         D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -71,7 +72,7 @@ bool SwapchainPresenter::Initialize(HWND hwnd, ID3D12Device* device, ID3D12Comma
     DXGI_SWAP_CHAIN_DESC1 scDesc{};
     scDesc.Width = width;
     scDesc.Height = height;
-    scDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+    scDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     scDesc.Stereo = FALSE;
     scDesc.SampleDesc.Count = 1;
     scDesc.SampleDesc.Quality = 0;
@@ -275,7 +276,7 @@ bool SwapchainPresenter::Resize(int width, int height) {
         BufferCount,
         width,
         height,
-        DXGI_FORMAT_B8G8R8A8_UNORM,
+        DXGI_FORMAT_R8G8B8A8_UNORM,
         DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING
     );
 
@@ -284,7 +285,7 @@ bool SwapchainPresenter::Resize(int width, int height) {
             BufferCount,
             width,
             height,
-            DXGI_FORMAT_B8G8R8A8_UNORM,
+            DXGI_FORMAT_R8G8B8A8_UNORM,
             0
         );
     }

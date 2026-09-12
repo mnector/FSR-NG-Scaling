@@ -24,7 +24,6 @@ set(SOURCES
     src/capture/capture_manager.cpp
     src/neural_engine/d3d12_compute_engine.cpp
     src/neural_engine/neural_upscaler.cpp
-    src/neural_engine/ngx_interop.cpp
     src/display/overlay_window.cpp
     src/display/swapchain_presenter.cpp
     src/utils/config_reader.cpp
@@ -36,7 +35,6 @@ set(HEADERS
     src/capture/frame_pool.h
     src/neural_engine/d3d12_compute_engine.h
     src/neural_engine/neural_upscaler.h
-    src/neural_engine/ngx_interop.h
     src/display/overlay_window.h
     src/display/swapchain_presenter.h
     src/utils/config_reader.h
@@ -61,7 +59,12 @@ target_link_libraries(FSR-NG-Scaling PRIVATE
 add_custom_command(TARGET FSR-NG-Scaling POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:FSR-NG-Scaling>/shaders
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:FSR-NG-Scaling>/config
-    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:FSR-NG-Scaling>/models
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/shaders/neural_scale_cs.hlsl $<TARGET_FILE_DIR:FSR-NG-Scaling>/shaders/
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/config/settings.ini $<TARGET_FILE_DIR:FSR-NG-Scaling>/config/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/OptiScaler.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/dxgi.dll
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/OptiScaler.ini $<TARGET_FILE_DIR:FSR-NG-Scaling>/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_amd_pass1.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_amd_pass2.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_amd_pass3.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_on_amd_weights.bin $<TARGET_FILE_DIR:FSR-NG-Scaling>/
 )

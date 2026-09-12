@@ -8,7 +8,6 @@
 
 #include "capture/capture_manager.h"
 #include "neural_engine/neural_upscaler.h"
-#include "neural_engine/ngx_interop.h"
 #include "display/overlay_window.h"
 #include "display/swapchain_presenter.h"
 #include "utils/config_reader.h"
@@ -40,19 +39,7 @@ int main(int argc, char* argv[]) {
     // 1. Load Configuration
     ConfigReader config("config/settings.ini");
     float intensity             = config.GetFloat("intensity", 1.00f);
-    float structureIntensity    = config.GetFloat("structure_intensity", 1.00f);
-    float toneIntensity         = config.GetFloat("tone_intensity", 1.00f);
     float splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
-    float temporalStability     = config.GetFloat("temporal_stability", 0.0f); // Default 0 to eliminate ghosting
-    float detailBoost           = config.GetFloat("detail_boost", 1.35f);
-    float catmullRom            = config.GetFloat("catmull_rom", 1.0f);
-    float skinStructureStrength = config.GetFloat("skin_structure_strength", -1.00f);
-    float nrPasses              = config.GetFloat("nr_passes", 1.0f);
-    float scenePaperWhite       = config.GetFloat("scene_paper_white", 1.000f);
-    float hdrTransferStrength   = config.GetFloat("hdr_transfer_strength", 1.00f);
-    float colorStrength         = config.GetFloat("color_strength", 1.00f);
-    float enableNR              = config.GetFloat("enable_nr", 1.0f);
-    float autoMask              = config.GetFloat("auto_mask", 1.0f);
     int   scaleFactor           = config.GetInt("scale_factor", 2);
     int   toggleKey             = config.GetInt("toggle_key", 83); // 'S'
     int   reloadKey             = config.GetInt("reload_key", 82); // 'R'
@@ -63,20 +50,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "[Config] Scale Factor: " << scaleFactor << "x\n";
     std::cout << "[Config] NR Intensity: " << intensity << "\n";
-    std::cout << "[Config] Local Structure: " << structureIntensity << "\n";
-    std::cout << "[Config] Local Tone: " << toneIntensity << "\n";
-    std::cout << "[Config] Skin Structure Strength: " << skinStructureStrength << "\n";
-    std::cout << "[Config] NR Passes: " << nrPasses << "\n";
-    std::cout << "[Config] Temporal Stability (Zero-Ghosting): " << temporalStability << "\n";
-    std::cout << "[Config] Detail Boost (DLSS 5 OpenNR): " << detailBoost << "\n";
-    std::cout << "[Config] Catmull-Rom 9-Tap Filter: " << (catmullRom > 0.5f ? "ON" : "OFF") << "\n";
     std::cout << "[Config] Initial Capture Mode: " << captureMode << "\n";
     std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "\n";
-
-    // 1.5 Load OptiScaler Early to ensure DXGI/D3D12 hooks are established before device creation
-    NgxInterop ngx;
-    ngx.ProbeAndInitialize(nullptr);
-    std::cout << "[Engine] " << ngx.statusMessage() << std::endl;
 
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
     NeuralUpscaler upscaler;
@@ -156,19 +131,7 @@ int main(int argc, char* argv[]) {
     // Allocate neural upscaler resources
     upscaler.Resize(capWidth, capHeight, capWidth, capHeight);
     upscaler.params.intensity = intensity;
-    upscaler.params.structureIntensity = structureIntensity;
-    upscaler.params.toneIntensity = toneIntensity;
     upscaler.params.splitScreen = splitScreen;
-    upscaler.params.temporalStability = temporalStability;
-    upscaler.params.detailBoost = detailBoost;
-    upscaler.params.catmullRom = catmullRom;
-    upscaler.params.skinStructureStrength = skinStructureStrength;
-    upscaler.params.nrPasses = nrPasses;
-    upscaler.params.scenePaperWhite = scenePaperWhite;
-    upscaler.params.hdrTransferStrength = hdrTransferStrength;
-    upscaler.params.colorStrength = colorStrength;
-    upscaler.params.enableNR = enableNR;
-    upscaler.params.autoMask = autoMask;
     upscaler.params.resetHistory = 1.0f;
 
     // Start with overlay in full click-through mode
@@ -205,31 +168,12 @@ int main(int argc, char* argv[]) {
     hotkeys.Register(reloadKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         config.Reload();
         upscaler.params.intensity             = config.GetFloat("intensity", 1.00f);
-        upscaler.params.structureIntensity    = config.GetFloat("structure_intensity", 1.00f);
-        upscaler.params.toneIntensity         = config.GetFloat("tone_intensity", 1.00f);
         upscaler.params.splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
-        upscaler.params.temporalStability     = config.GetFloat("temporal_stability", 0.0f);
-        upscaler.params.detailBoost           = config.GetFloat("detail_boost", 1.35f);
-        upscaler.params.catmullRom            = config.GetFloat("catmull_rom", 1.0f);
-        upscaler.params.skinStructureStrength = config.GetFloat("skin_structure_strength", -1.00f);
-        upscaler.params.nrPasses              = config.GetFloat("nr_passes", 1.0f);
-        upscaler.params.scenePaperWhite       = config.GetFloat("scene_paper_white", 1.000f);
-        upscaler.params.hdrTransferStrength   = config.GetFloat("hdr_transfer_strength", 1.00f);
-        upscaler.params.colorStrength         = config.GetFloat("color_strength", 1.00f);
-        upscaler.params.enableNR              = config.GetFloat("enable_nr", 1.0f);
-        upscaler.params.autoMask              = config.GetFloat("auto_mask", 1.0f);
-        std::string newMode = config.GetString("capture_mode", "window");
+        std::string newMode = config.GetString("capture_mode", "desktop");
         windowModeActive = (newMode == "window");
         upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
                   << " Intensity=" << upscaler.params.intensity
-                  << " Structure=" << upscaler.params.structureIntensity
-                  << " Tone=" << upscaler.params.toneIntensity
-                  << " SkinStructure=" << upscaler.params.skinStructureStrength
-                  << " NRPasses=" << upscaler.params.nrPasses
-                  << " Temporal=" << upscaler.params.temporalStability
-                  << " DetailBoost=" << upscaler.params.detailBoost
-                  << " CatmullRom=" << (upscaler.params.catmullRom > 0.5f ? "ON" : "OFF")
                   << " Mode=" << (windowModeActive.load() ? "Window" : "Desktop")
                   << " SplitScreen=" << upscaler.params.splitScreen << std::endl;
     });
@@ -324,10 +268,6 @@ int main(int argc, char* argv[]) {
             std::cout << "\r[Running] FPS: " << std::fixed << std::setprecision(1) << currentFps
                       << " | Mode: " << (upscaler.params.modeWindow > 0.5f ? "WINDOW" : "DESKTOP")
                       << " | Out: " << upscaler.outWidth() << "x" << upscaler.outHeight()
-                      << " | Skin: " << upscaler.params.skinStructureStrength
-                      << " | Passes: " << (int)round(upscaler.params.nrPasses)
-                      << " | NR: " << (upscaler.params.enableNR > 0.5f ? "ON" : "OFF")
-                      << " | Temporal: " << upscaler.params.temporalStability
                       << " | Menu: OptiScaler Native"
                       << std::flush;
         }

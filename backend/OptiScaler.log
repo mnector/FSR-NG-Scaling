@@ -1,0 +1,70 @@
+[00:00:55.531161] [W] OptiScaler v10.0.0-dev (amd-presr-multipass-local) (20260908_192554) loaded
+[00:00:55.531228] [W] ---------------------------------
+[00:00:55.531241] [W] OptiScaler is freely downloadable from
+[00:00:55.531249] [W] GitHub : https://github.com/optiscaler/OptiScaler/releases
+[00:00:55.531257] [W] Nexus  : https://www.nexusmods.com/site/mods/986
+[00:00:55.531265] [W] If you paid for these files, you've been scammed!
+[00:00:55.531272] [W] DO NOT USE IN MULTIPLAYER GAMES
+[00:00:55.531279] [I] 
+[00:00:55.531290] [I] LogLevel: 2
+[00:00:55.531298] [I] 
+[00:00:55.531339] [I] Windows version: Windows 11 (10.0.26200)
+[00:00:55.531454] [I] 
+[00:00:55.531466] [I] Config parameters:
+[00:00:55.531486] [I] Upscalers.Dx12Upscaler: ffx
+[00:00:55.531492] [I] FrameGen.Enabled: false
+[00:00:55.531496] [I] FrameGen.External: false
+[00:00:55.531501] [I] DlssNr.Enabled: false
+[00:00:55.531506] [I] DlssNr.RunBeforeSR: true
+[00:00:55.531511] [I] DlssNr.ApplyAfterRR: false
+[00:00:55.531516] [I] DlssNr.Passes: 1
+[00:00:55.531520] [I] DlssNr.LocalStructure: 1
+[00:00:55.531525] [I] DlssNr.LocalTone: 0
+[00:00:55.531530] [I] DlssNr.AmdNeuralLighting: true
+[00:00:55.531535] [I] DlssNr.AmdNeuralLightingStrength: 0.5
+[00:00:55.531540] [I] DlssNr.AmdModelScale: 1
+[00:00:55.531546] [I] AmdRtgi.Enabled: false
+[00:00:55.531550] [I] AmdRtgi.Quality: 2
+[00:00:55.531554] [I] AmdRtgi.Denoiser: 1
+[00:00:55.531558] [I] AmdRtgi.Inspect: 0
+[00:00:55.531562] [I] AmdRtgi.Contact: 0
+[00:00:55.531565] [I] AmdRtgi.Saturation: 1
+[00:00:55.531569] [I] AmdRtgi.Radius: 1
+[00:00:55.531573] [I] AmdRtgi.Mix: 1
+[00:00:55.531577] [I] AmdRtgi.Lighting: 5
+[00:00:55.531581] [I] AmdRtgi.Occlusion: 1
+[00:00:55.531584] [I] AmdRtgi.Ambient: 1
+[00:00:55.531588] [I] AmdRtgi.Thickness: 0.1
+[00:00:55.531592] [I] AmdRtgi.Smoothness: 0.5
+[00:00:55.531596] [I] AmdRtgi.Fade: 0.3
+[00:00:55.531599] [I] AmdRtgi.Fov: 60
+[00:00:55.531603] [I] AmdRtgi.FarPlane: 600
+[00:00:55.531607] [I] AmdLook.Enabled: false
+[00:00:55.531611] [I] AmdLook.Appearance: 2
+[00:00:55.531615] [I] AmdLook.Mix: 1
+[00:00:55.531619] [I] AmdLook.MaterialDetail: 1.15
+[00:00:55.531623] [I] AmdLook.ShapeDefinition: 1.2
+[00:00:55.531626] [I] AmdLook.LocalLighting: 1.15
+[00:00:55.531630] [I] AmdLook.SkinDetail: 1.1
+[00:00:55.531634] [I] AmdLook.SkinSoftness: 0.486
+[00:00:55.531638] [I] AmdLook.DetectSkin: true
+[00:00:55.531642] [I] AmdLook.SpecularControl: 0.58
+[00:00:55.531645] [I] AmdLook.HighlightRollOff: 0.9
+[00:00:55.531649] [I] AmdLook.ColourSeparation: 0
+[00:00:55.531653] [I] AmdLook.ShadowDepth: 0.2
+[00:00:55.531657] [I] AmdLook.AntiHalo: 0.901
+[00:00:55.531661] [I] AmdLook.FlatAreaProtection: 0
+[00:00:55.531665] [I] AmdLook.Inspect: 0
+[00:00:55.531668] [I] AmdLook.Tone: 0
+[00:00:55.531672] [I] AmdLook.ExposureEV: 1
+[00:00:55.531676] [I] AmdLook.Contrast: 1
+[00:00:55.531680] [I] AmdLook.Saturation: 1
+[00:00:55.531683] [I] AmdLook.HighlightCompression: 0
+[00:00:55.531687] [I] DlssNr.SkinStructure: 1
+[00:00:55.531691] [I] Log.LogToFile: true
+[00:00:55.531695] [I] Log.LogLevel: 2
+[00:00:55.531700] [I] 
+[00:00:55.531705] [I] Setting DllPath to C:\Users\mnect\.hermes\tools\FSR-NG-Scaling\build\Release
+[00:00:55.531709] [I] 
+[00:00:55.531787] [I] 
+[00:00:55.531801] [W] IsRunningOnWine Wine not detected

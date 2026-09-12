@@ -1,72 +1,91 @@
-# FSR-NG-Scaling (Powered by Envy-Diamond 💎)
+<div align="center">
+  <img src="https://raw.githubusercontent.com/mnector/FSR-NG-Scaling/main/test_upscaled.bmp" alt="FSR-NG-Scaling Banner" width="400" onerror="this.style.display='none'">
+  <h1>🌟 FSR-NG-Scaling 🌟<br><sub>Powered by Envy-Diamond 💎</sub></h1>
+  
+  <p><strong>Next-Gen AI Image Upscaling for Windows 11</strong></p>
+  
+  <a href="https://paypal.me/mnecstream"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate"></a>
+  <img src="https://img.shields.io/badge/Platform-Windows%2011-blue?style=for-the-badge&logo=windows" alt="Windows 11">
+  <img src="https://img.shields.io/badge/API-DirectX%2012-red?style=for-the-badge" alt="DirectX 12">
+</div>
 
-Aplicación nativa para Windows 11 (C++20 / DirectX 12) diseñada para escalar y mejorar en tiempo real fotogramas de cualquier ventana o videojuego utilizando **el motor y backend de Envy-Diamond / OptiScaler** en GPUs AMD Radeon, proyectando el resultado a través de un overlay sin bordes de latencia ultra-baja.
+<br/>
 
-[![Donate](https://img.shields.io/badge/Donate-PayPal-blue.svg)](https://paypal.me/mnecstream)
-
-## Tabla de Contenidos
-- [Características Principales](#características-principales)
-- [Arquitectura y Funcionamiento](#arquitectura-y-funcionamiento)
-- [Estructura del Proyecto](#estructura-del-proyecto)
-- [Requisitos y Compilación](#requisitos-y-compilación)
-- [Controles FSR-NG-Scaling](#controles-fsr-ng-scaling)
-- [Donaciones](#donaciones)
-
----
-
-## Características Principales
-
-*   **Cero Inyección de Procesos:** No utiliza wrappers ni modifica la memoria del juego de forma invasiva, extrayendo frames directamente desde DXGI.
-*   **Motor Envy-Diamond (OptiScaler):** Aprovecha la tecnología de pases múltiples neurales para renderizado en GPUs AMD, integrada nativamente en el pipeline de la aplicación.
-*   **Acumulación Temporal e Histéresis:** Búfer de historia que suprime el ghosting mediante clamping local (AABB).
-*   **Overlay Ultra-Baja Latencia:** Ventana transparente con SwapChain en modelo Flip Discard y soporte de tearing.
+> [!NOTE]  
+> A native Windows 11 application (C++20 / DirectX 12) designed to scale and enhance real-time frames from **any** window or game. By harnessing the **Envy-Diamond / OptiScaler engine backend** on AMD Radeon GPUs, it projects the result through an ultra-low latency, borderless overlay.
 
 ---
 
-## Arquitectura y Funcionamiento
+## 📑 Table of Contents
+- [✨ Key Features](#-key-features)
+- [🧩 Architecture & Workflow](#-architecture--workflow)
+- [📂 Project Structure](#-project-structure)
+- [⚙️ Requirements & Build Guide](#️-requirements--build-guide)
+- [🎮 Hotkeys & Controls](#-hotkeys--controls)
+- [💖 Support the Project](#-support-the-project)
+
+---
+
+## ✨ Key Features
+
+*   🛡️ **Zero Process Injection:** Doesn't use wrappers or invasively modify game memory. It extracts frames directly via DXGI Desktop Duplication.
+*   🚀 **Envy-Diamond Engine (OptiScaler):** Takes advantage of multi-pass neural rendering technology for AMD GPUs, natively integrated into the application's pipeline.
+*   ⏱️ **Temporal Accumulation & Hysteresis:** Includes a history buffer that suppresses ghosting through local AABB clamping.
+*   ⚡ **Ultra-Low Latency Overlay:** Topmost transparent window utilizing a Flip Discard SwapChain with screen tearing support.
+
+---
+
+## 🧩 Architecture & Workflow
 
 ```mermaid
 graph TD
-    A1[Juego / Ventana] -->|Captura DXGI| B1(FSR-NG Capture Pipeline)
-    B1 -->|Inferencia vía NGX API| C1{Envy-Diamond / OptiScaler DLL}
-    C1 -->|Pases de Escalado AMD| D1[Procesado Neural]
-    D1 -->|Renderizado| E1[Overlay Directo en Pantalla]
+    A1[Game / Window] -->|DXGI Capture| B1(FSR-NG Capture Pipeline)
+    B1 -->|NGX API Inference| C1{Envy-Diamond / OptiScaler DLL}
+    C1 -->|AMD Scaling Passes| D1[Neural Processing]
+    D1 -->|Render| E1[Direct Screen Overlay]
+    
+    style A1 fill:#1f2937,stroke:#3b82f6,stroke-width:2px,color:#fff
+    style B1 fill:#374151,stroke:#8b5cf6,stroke-width:2px,color:#fff
+    style C1 fill:#10b981,stroke:#047857,stroke-width:3px,color:#fff
+    style D1 fill:#374151,stroke:#ec4899,stroke-width:2px,color:#fff
+    style E1 fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
 ```
 
 ---
 
-## Estructura del Proyecto
+## 📂 Project Structure
 
 ```text
 FSR-NG-Scaling/
-├── CMakeLists.txt              # Configuración CMake FSR-NG-Scaling
-├── README.md                   # Documentación
-├── build.bat                   # Script de compilación Release FSR-NG
-├── backend/                    # Librerías de motor Envy-Diamond (OptiScaler.dll, pases AMD, pesos binarios)
-├── config/                     # Configuraciones de FSR-NG
-├── shaders/                    # Shaders HLSL para el Pipeline Gráfico
-└── src/                        # Código fuente C++ (C++20, MSVC, DX12, DXGI)
+├── 📄 CMakeLists.txt           # FSR-NG CMake configuration
+├── 📖 README.md                # Project documentation
+├── 🛠️ build.bat                # Quick release compilation script
+├── 📦 backend/                 # Envy-Diamond engine libraries (OptiScaler.dll, AMD passes, bin weights)
+├── ⚙️ config/                  # FSR-NG settings.ini configuration
+├── 🎨 shaders/                 # HLSL Shaders for the Graphics Pipeline
+└── 💻 src/                     # C++ Source code (C++20, MSVC, DX12, DXGI)
 ```
 
 ---
 
-## Requisitos y Compilación
+## ⚙️ Requirements & Build Guide
 
-Para construir la aplicación independiente de captura de pantalla y sobreposición:
-*   **Sistema Operativo:** Windows 11 (x64)
-*   **Compilador:** Microsoft Visual Studio 2022 / 2026 (MSVC C++20)
-*   **SDK:** Windows 10/11 SDK (10.0.19041+)
-*   **CMake:** Versión 3.20 o superior
+To build this standalone screen capture and overlay application from source, you will need:
 
-**Notas sobre el backend:**  
-Debes colocar los binarios de **Envy-Diamond** (como `OptiScaler.dll`, los dll de los pases de AMD y los pesos `.bin`) dentro de la carpeta `backend/` antes de ejecutar. *(Por motivos de licencias y tamaño, los binarios pesados no están incluidos en el código fuente de GitHub).*
+*   🖥️ **OS:** Windows 11 (x64)
+*   🛠️ **Compiler:** Microsoft Visual Studio 2022 / 2026 (MSVC C++20)
+*   🧰 **SDK:** Windows 10/11 SDK (10.0.19041+)
+*   📦 **CMake:** Version 3.20 or higher
 
-**Compilación rápida:**
+> [!WARNING]  
+> **Backend Note:** You must place the **Envy-Diamond** binaries (such as `OptiScaler.dll`, AMD pass DLLs, and `.bin` weights) inside the `backend/` folder before running. *(Due to licensing and file size limits, these heavy binaries are not included in the GitHub source code).*
+
+### Quick Build:
 ```cmd
 build.bat
 ```
 
-O manualmente mediante CMake:
+### Manual Build via CMake:
 ```cmd
 cmake -B build -A x64
 cmake --build build --config Release
@@ -74,19 +93,26 @@ cmake --build build --config Release
 
 ---
 
-## Controles FSR-NG-Scaling
+## 🎮 Hotkeys & Controls
 
-*   **`Ctrl + Alt + S`**: Alternar la escala en vivo (Activar/Desactivar Overlay).
-*   **`Ctrl + Alt + W`**: Alternar entre modo Ventana Activa Dinámica y modo Monitor Completo.
-*   **`Ctrl + Alt + R`**: Recargar `config/settings.ini` en caliente sin reiniciar la aplicación.
-*   **`Ctrl + C`**: Cierre limpio y liberación de recursos GPU.
-*   **`Insert` / `Home`**: Mostrar/Ocultar el menú de control GUI (ImGui) de OptiScaler/Envy-Diamond.
+You can control the live FSR-NG-Scaling behavior using the following global hotkeys:
+
+| Shortcut | Action |
+| :--- | :--- |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | Toggle live scaling (Enable/Disable Overlay). |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>W</kbd> | Toggle between **Dynamic Active Window** mode and **Full Desktop** mode. |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>R</kbd> | Hot-reload `config/settings.ini` without restarting the app. |
+| <kbd>Ctrl</kbd> + <kbd>C</kbd> | Clean exit and GPU resource release (In terminal). |
+| <kbd>Insert</kbd> / <kbd>Home</kbd> | Show/Hide the **OptiScaler / Envy-Diamond native GUI menu**. |
 
 ---
 
-## Donaciones
+## 💖 Support the Project
 
-Si este proyecto te ha sido útil, considera apoyar su desarrollo:
+If you found this project helpful and want to support future development, consider leaving a donation!
 
-<br>
-<a href="https://paypal.me/mnecstream" target="_blank"><img src="https://www.paypalobjects.com/webstatic/mktg/logo/pp_cc_mark_111x69.jpg" alt="Donate with PayPal" width="100"/></a>
+<div align="center">
+  <a href="https://paypal.me/mnecstream" target="_blank">
+    <img src="https://www.paypalobjects.com/webstatic/mktg/logo/pp_cc_mark_111x69.jpg" alt="Donate with PayPal" width="120" style="border-radius:10px;"/>
+  </a>
+</div>

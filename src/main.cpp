@@ -11,7 +11,6 @@
 #include "neural_engine/ngx_interop.h"
 #include "display/overlay_window.h"
 #include "display/swapchain_presenter.h"
-#include "display/imgui_overlay.h"
 #include "utils/config_reader.h"
 #include "utils/hotkey_manager.h"
 
@@ -172,29 +171,6 @@ int main(int argc, char* argv[]) {
     upscaler.params.autoMask = autoMask;
     upscaler.params.resetHistory = 1.0f;
 
-    // 6.1 Initialize Dear ImGui overlay (DLSS 5 Neural Rendering menu)
-    ImGuiOverlay imgui;
-    if (!imgui.Initialize(overlay.hwnd(), device, directQueue, DXGI_FORMAT_B8G8R8A8_UNORM)) {
-        std::cerr << "[ImGui] Warning: Failed to initialize Dear ImGui overlay\n";
-    }
-    overlay.SetHitTestCallback([&](int x, int y) -> bool {
-        return imgui.IsPointInsideMenu(x, y);
-    });
-
-    overlay.SetMsgCallback([&](HWND h, UINT m, WPARAM w, LPARAM l) -> bool {
-        return imgui.ProcessMessage(h, m, w, l);
-    });
-
-    imgui.SetVisibilityChangedCallback([&](bool visible) {
-        overlay.SetClickThrough(!visible);
-        if (visible) {
-            SetForegroundWindow(overlay.hwnd());
-            SetActiveWindow(overlay.hwnd());
-        }
-        std::cout << "\n[GUI] DLSS 5 GUI Menu: "
-                  << (visible ? "OPEN (Interactive)" : "CLOSED (Click-Through)") << std::endl;
-    });
-
     // Start with overlay in full click-through mode
     overlay.SetClickThrough(true);
 
@@ -207,13 +183,6 @@ int main(int argc, char* argv[]) {
     std::atomic<bool> windowModeActive{ captureMode == "window" };
     HWND lastForegroundHwnd = nullptr;
     std::string currentTargetTitle = "Desktop";
-
-    // Insert or Home: Toggle DLSS 5 Neural Rendering GUI menu
-    auto toggleGuiMenu = [&]() {
-        imgui.ToggleVisibility();
-    };
-    hotkeys.Register(VK_INSERT, 0, toggleGuiMenu);
-    hotkeys.Register(VK_HOME, 0, toggleGuiMenu);
 
     // Ctrl+Alt+S: Toggle live scaling
     hotkeys.Register(toggleKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
@@ -339,11 +308,9 @@ int main(int argc, char* argv[]) {
 
         totalFramesRendered++;
 
-        // D. Present via Flip Discard SwapChain with live Dear ImGui DLSS 5 Neural Rendering overlay
+        // D. Present via Flip Discard SwapChain
         if (upscaler.output()) {
-            presenter.Present(upscaler.output(), [&](ID3D12GraphicsCommandList* cl) {
-                imgui.Render(cl, upscaler.params, currentFps, totalFramesRendered, upscaler.outWidth(), upscaler.outHeight());
-            }, true);
+            presenter.Present(upscaler.output(), nullptr, true);
         }
 
         frameCounter++;
@@ -361,13 +328,12 @@ int main(int argc, char* argv[]) {
                       << " | Passes: " << (int)round(upscaler.params.nrPasses)
                       << " | NR: " << (upscaler.params.enableNR > 0.5f ? "ON" : "OFF")
                       << " | Temporal: " << upscaler.params.temporalStability
-                      << " | Menu: " << (imgui.isVisible() ? "VISIBLE" : "HIDDEN")
+                      << " | Menu: OptiScaler Native"
                       << std::flush;
         }
     }
 
     std::cout << "\n[FSR-NG] Cleaning up and shutting down gracefully...\n";
-    imgui.Shutdown();
     overlay.Show(false);
     capture.Stop();
 

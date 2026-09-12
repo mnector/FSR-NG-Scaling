@@ -105,7 +105,21 @@ bool NeuralUpscaler::CreateDummyTextures(int w, int h) {
     }
     dummyDepth_->SetName(L"Dummy Depth");
 
-    // Dummy textures remain uninitialized. FSR2 will use them as zero/garbage.
+    // Albedo / Color Mask (R8G8B8A8_UNORM)
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (FAILED(engine_.device()->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&dummyAlbedo_)))) {
+        return false;
+    }
+    dummyAlbedo_->SetName(L"Dummy Albedo");
+
+    // Normals (R16G16_FLOAT or R8G8B8A8_UNORM)
+    desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (FAILED(engine_.device()->CreateCommittedResource(&heapProps, D3D12_HEAP_FLAG_NONE, &desc, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, nullptr, IID_PPV_ARGS(&dummyNormal_)))) {
+        return false;
+    }
+    dummyNormal_->SetName(L"Dummy Normal");
+
+    // Dummy textures remain uninitialized. FSR2/Envy-Diamond will use them as zero/garbage.
     return true;
 }
 
@@ -188,6 +202,8 @@ bool NeuralUpscaler::Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT fo
 
     TransitionResource(cmd.Get(), dummyMVs_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
     TransitionResource(cmd.Get(), dummyDepth_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    TransitionResource(cmd.Get(), dummyAlbedo_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+    TransitionResource(cmd.Get(), dummyNormal_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
 
     NVSDK_NGX_Result res = pfnCreateFeature(cmd.Get(), NVSDK_NGX_Feature_SuperSampling, ngxParameters_, &ngxFeature_);
     
@@ -266,6 +282,9 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
     ngxParameters_->Set(NVSDK_NGX_Parameter_Output, outputResource_.Get());
     ngxParameters_->Set(NVSDK_NGX_Parameter_Depth, dummyDepth_.Get());
     ngxParameters_->Set(NVSDK_NGX_Parameter_MotionVectors, dummyMVs_.Get());
+    ngxParameters_->Set("Albedo", dummyAlbedo_.Get());
+    ngxParameters_->Set("Roughness", dummyNormal_.Get()); // Reusing normal as roughness to save memory
+    ngxParameters_->Set("DLSS.Input.Bias.Current.Color.Mask", dummyAlbedo_.Get());
     ngxParameters_->Set(NVSDK_NGX_Parameter_MV_Scale_X, 1.0f);
     ngxParameters_->Set(NVSDK_NGX_Parameter_MV_Scale_Y, 1.0f);
     ngxParameters_->Set(NVSDK_NGX_Parameter_Jitter_Offset_X, 0.0f);

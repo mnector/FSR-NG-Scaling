@@ -43,6 +43,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12Resource> cropResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> dummyDepth_;
     Microsoft::WRL::ComPtr<ID3D12Resource> dummyMVs_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> dummyAlbedo_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> dummyNormal_;
 
     HMODULE hNvngx_ = nullptr;
     NVSDK_NGX_Parameter* ngxParameters_ = nullptr;

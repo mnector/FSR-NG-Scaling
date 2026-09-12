@@ -80,8 +80,7 @@ bool OverlayWindow::Create(const std::string& title, int width, int height) {
     height_ = screenH;
 
     // Start as Click-Through Ghost (Game Mode)
-    // WS_EX_LAYERED | WS_EX_TRANSPARENT ensures mouse passes through.
-    DWORD exStyle = WS_EX_LAYERED | WS_EX_TRANSPARENT;
+    DWORD exStyle = WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TRANSPARENT;
     DWORD style = WS_POPUP;
 
     std::wstring wTitle(title.begin(), title.end());
@@ -116,9 +115,8 @@ void OverlayWindow::Show(bool visible) {
     if (!hwnd_) return;
     isVisible_ = visible;
     if (visible) {
-        ShowWindow(hwnd_, SW_SHOW);
-        SetForegroundWindow(hwnd_);
-        SetFocus(hwnd_);
+        ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
+        // Do not force focus here, leave it to Menu Mode
     } else {
         ShowWindow(hwnd_, SW_HIDE);
     }
@@ -137,11 +135,21 @@ void OverlayWindow::SetClickThrough(bool enable) {
     clickThrough_ = enable;
     LONG_PTR exStyle = GetWindowLongPtrW(hwnd_, GWL_EXSTYLE);
     if (enable) {
-        exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT);
+        // Game Mode: Ghost, Topmost, NoActivate, Toolwindow
+        exStyle |= (WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
     } else {
-        exStyle &= ~(WS_EX_LAYERED | WS_EX_TRANSPARENT);
+        // Menu Mode: Solid, Standard, Activatable
+        exStyle &= ~(WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW);
     }
     SetWindowLongPtrW(hwnd_, GWL_EXSTYLE, exStyle);
+
+    if (enable) {
+        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    } else {
+        SetWindowPos(hwnd_, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE);
+        SetForegroundWindow(hwnd_);
+        SetFocus(hwnd_);
+    }
 }
 
 bool OverlayWindow::ProcessMessages() {

@@ -30,3 +30,5 @@ nvngx_dlssnr.dll
 !weights/.gitkeep
 !weights/model_manifest.json
 !models/model_manifest.json
+backend/*.dll
+backend/*.bin

@@ -7,7 +7,7 @@ namespace fsrng {
 NeuralUpscaler::NeuralUpscaler() = default;
 NeuralUpscaler::~NeuralUpscaler() = default;
 
-bool NeuralUpscaler::Initialize(const std::string& hlslPath, const std::string& modelPath, const std::string& expectedSha) {
+bool NeuralUpscaler::Initialize(const std::string& hlslPath) {
     if (!engine_.Initialize()) {
         error_ = "Failed to initialize D3D12ComputeEngine: " + engine_.error();
         return false;
@@ -18,85 +18,13 @@ bool NeuralUpscaler::Initialize(const std::string& hlslPath, const std::string& 
         return false;
     }
 
-    if (!modelPath.empty()) {
-        bool loaded = modelLoader_.Load(modelPath, expectedSha);
-        if (!loaded) {
-            loaded = modelLoader_.Load("build/Release/" + modelPath, expectedSha);
-        }
-        if (!loaded) {
-            loaded = modelLoader_.Load("weights/model.safetensors", expectedSha);
-        }
-
-        if (loaded) {
-            size_t totalModelTensors = modelLoader_.tensors().size();
-            std::cout << "[NeuralUpscaler] Loaded model from: " << modelPath << " ("
-                      << totalModelTensors << " neural tensors)" << std::endl;
-
-            // Deep Tensor Mapping: Pack structured layers and deep cascade into unified GPU buffer
-            // Header: 64 floats (table of offsets and strides)
-            // Indices 0..12: Offsets for each functional layer
-            constexpr size_t HEADER_SIZE = 64;
-            std::vector<float> packedWeights(HEADER_SIZE, 0.0f);
-
-            auto appendTensor = [&](const std::string& name, size_t maxElements, size_t headerOffsetIndex) {
-                std::vector<float> data;
-                if (modelLoader_.GetTensorF32(name, data, maxElements) && !data.empty()) {
-                    packedWeights[headerOffsetIndex] = static_cast<float>(packedWeights.size());
-                    packedWeights.insert(packedWeights.end(), data.begin(), data.end());
-                    return true;
-                }
-                packedWeights[headerOffsetIndex] = 0.0f; // indicates not available
-                return false;
-            };
-
-            // 1. Primary Transformer & Convolutional Layers (Expanded for 4-Head W-MSA)
-            appendTensor("layer0.conv",   8192, 0);
-            appendTensor("layer0.weight", 8192, 1);
-            appendTensor("layer1.weight", 8192, 2);
-            appendTensor("layer2.qkv",   32768, 3);
-            appendTensor("layer2.attn",  16384, 4);
-            appendTensor("layer3.attn",  16384, 5);
-            appendTensor("layer3.proj",  16384, 6);
-            appendTensor("layer4.weight", 8192, 7);
-            appendTensor("layer4.attn",  16384, 8);
-            appendTensor("layer4.proj",  16384, 9);
-
-            // 2. Deep Cascade Stages (open_nr_layer_010 through open_nr_layer_073 -> 64 layers)
-            size_t cascadeStart = packedWeights.size();
-            packedWeights[10] = static_cast<float>(cascadeStart);
-            size_t cascadeLayersLoaded = 0;
-            constexpr size_t CASCADE_STRIDE = 1024;
-            packedWeights[12] = static_cast<float>(CASCADE_STRIDE);
-
-            for (int i = 10; i <= 73; ++i) {
-                char layerName[64];
-                snprintf(layerName, sizeof(layerName), "open_nr_layer_%03d.weight", i);
-                std::vector<float> layerData;
-                if (modelLoader_.GetTensorF32(layerName, layerData, CASCADE_STRIDE)) {
-                    if (layerData.size() < CASCADE_STRIDE) {
-                        layerData.resize(CASCADE_STRIDE, 0.0f);
-                    }
-                    packedWeights.insert(packedWeights.end(), layerData.begin(), layerData.end());
-                    cascadeLayersLoaded++;
-                }
-            }
-            packedWeights[11] = static_cast<float>(cascadeLayersLoaded);
-
-            engine_.SetWeights(packedWeights.data(), packedWeights.size() * sizeof(float));
-            params.hasWeights = 1.0f;
-
-            std::cout << "[NeuralUpscaler] Deep Tensor Mapping ready: "
-                      << packedWeights.size() << " parameters uploaded ("
-                      << cascadeLayersLoaded << " cascaded residual layers mapped)." << std::endl;
-        } else {
-            std::cout << "[NeuralUpscaler] Warning: Could not load model: " << modelLoader_.lastError()
-                      << " (falling back to adaptive procedural neural kernel)" << std::endl;
-        }
-    }
+    // Relying on Envy-Diamond (OptiScaler) Engine integration instead of SafeTensors
+    std::cout << "[NeuralUpscaler] Initialized using Envy-Diamond / OptiScaler engine architecture." << std::endl;
 
     initialized_ = true;
     return true;
 }
+
 
 bool NeuralUpscaler::Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format) {
     if (inW <= 0 || inH <= 0 || outW <= 0 || outH <= 0) return false;

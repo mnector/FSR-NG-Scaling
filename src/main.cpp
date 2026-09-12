@@ -77,7 +77,7 @@ int main(int argc, char* argv[]) {
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
     NeuralUpscaler upscaler;
     std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline...\n";
-    if (!upscaler.Initialize("shaders/neural_scale_cs.hlsl", modelPath, expectedSha)) {
+    if (!upscaler.Initialize("shaders/neural_scale_cs.hlsl")) {
         std::cerr << "[Engine] ERROR: " << upscaler.error() << std::endl;
         return 1;
     }

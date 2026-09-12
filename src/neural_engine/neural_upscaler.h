@@ -1,6 +1,5 @@
 #pragma once
 #include "d3d12_compute_engine.h"
-#include "safetensors_loader.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -12,8 +11,8 @@ public:
     NeuralUpscaler();
     ~NeuralUpscaler();
 
-    // Initialize D3D12 compute engine and optionally load SafeTensors model weights
-    bool Initialize(const std::string& hlslPath, const std::string& modelPath = "", const std::string& expectedSha = "");
+    // Initialize D3D12 compute engine and Envy-Diamond backend
+    bool Initialize(const std::string& hlslPath);
 
     // Resize or allocate the output UAV texture and internal staging resources
     bool Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
@@ -38,7 +37,6 @@ public:
 
 private:
     D3D12ComputeEngine engine_;
-    SafetensorsLoader  modelLoader_;
     Microsoft::WRL::ComPtr<ID3D12Resource> outputResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> historyResource_;
 

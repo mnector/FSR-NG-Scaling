@@ -24,7 +24,6 @@ set(SOURCES
     src/capture/capture_manager.cpp
     src/neural_engine/d3d12_compute_engine.cpp
     src/neural_engine/neural_upscaler.cpp
-    src/neural_engine/safetensors_loader.cpp
     src/neural_engine/ngx_interop.cpp
     src/display/overlay_window.cpp
     src/display/swapchain_presenter.cpp
@@ -44,7 +43,6 @@ set(HEADERS
     src/capture/frame_pool.h
     src/neural_engine/d3d12_compute_engine.h
     src/neural_engine/neural_upscaler.h
-    src/neural_engine/safetensors_loader.h
     src/neural_engine/ngx_interop.h
     src/display/overlay_window.h
     src/display/swapchain_presenter.h

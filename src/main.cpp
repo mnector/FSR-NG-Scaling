@@ -116,7 +116,10 @@ int main(int argc, char* argv[]) {
 
     // Allocate neural upscaler resources
     float initialScale = config.GetFloat("desktop_scale", 1.0f);
-    upscaler.Resize(capWidth, capHeight, capWidth, capHeight, presenter.format(), initialScale);
+    float initialOutScale = config.GetFloat("output_scale", 1.0f);
+    int initialOutW = static_cast<int>(capWidth * initialOutScale);
+    int initialOutH = static_cast<int>(capHeight * initialOutScale);
+    upscaler.Resize(capWidth, capHeight, initialOutW, initialOutH, presenter.format(), initialScale);
     upscaler.params.intensity = intensity;
     upscaler.params.splitScreen = splitScreen;
     upscaler.params.resetHistory = 1.0f;
@@ -178,7 +181,8 @@ int main(int argc, char* argv[]) {
         std::string newMode = config.GetString("capture_mode", "desktop");
         windowModeActive = (newMode == "window");
         float desktopScale = config.GetFloat("desktop_scale", 1.0f);
-        upscaler.Resize(upscaler.inWidth(), upscaler.inHeight(), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), presenter.format(), desktopScale);
+        float rOutScale = config.GetFloat("output_scale", 1.0f);
+        upscaler.Resize(upscaler.inWidth(), upscaler.inHeight(), static_cast<int>(GetSystemMetrics(SM_CXSCREEN) * rOutScale), static_cast<int>(GetSystemMetrics(SM_CYSCREEN) * rOutScale), presenter.format(), desktopScale);
         upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
                   << " Intensity=" << upscaler.params.intensity
@@ -240,8 +244,11 @@ int main(int argc, char* argv[]) {
             lastForegroundHwnd = nullptr;
         }
 
-        int currentOutputW = GetSystemMetrics(SM_CXSCREEN);
-        int currentOutputH = GetSystemMetrics(SM_CYSCREEN);
+        float outputScale = config.GetFloat("output_scale", 1.0f);
+    int currentOutputW = static_cast<int>(GetSystemMetrics(SM_CXSCREEN) * outputScale);
+        int currentOutputH = static_cast<int>(GetSystemMetrics(SM_CYSCREEN) * outputScale);
+    if (currentOutputW < 16) currentOutputW = 16;
+    if (currentOutputH < 16) currentOutputH = 16;
         int overlayX = 0;
         int overlayY = 0;
 
@@ -252,13 +259,13 @@ int main(int argc, char* argv[]) {
             currentY = 0;
         }
 
-        if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight()) {
+        if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight() || currentOutputW != upscaler.outWidth()) {
             float desktopScale = config.GetFloat("desktop_scale", 1.0f);
             upscaler.Resize(currentInputW, currentInputH, currentOutputW, currentOutputH, presenter.format(), desktopScale);
-            overlay.SetPositionAndSize(overlayX, overlayY, currentOutputW, currentOutputH);
+            overlay.SetPositionAndSize(overlayX, overlayY, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
             presenter.Resize(currentOutputW, currentOutputH);
         } else if (windowModeActive.load()) {
-            overlay.SetPositionAndSize(overlayX, overlayY, currentOutputW, currentOutputH);
+            overlay.SetPositionAndSize(overlayX, overlayY, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
         }
 
         // B. Acquire frame from GPU VRAM

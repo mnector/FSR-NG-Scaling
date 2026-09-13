@@ -287,6 +287,20 @@ int main(int argc, char* argv[]) {
                       << " | Menu: OptiScaler Native"
                       << std::flush;
         }
+
+        // FPS Limiter
+        static auto lastRenderTime = std::chrono::steady_clock::now();
+        auto currentRenderTime = std::chrono::steady_clock::now();
+        std::chrono::duration<double, std::milli> frameDuration = currentRenderTime - lastRenderTime;
+        
+        float fpsLimit = config.GetFloat("fps_limit", 30.0f);
+        if (fpsLimit > 0.0f) {
+            double targetDuration = 1000.0 / fpsLimit;
+            if (frameDuration.count() < targetDuration) {
+                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long long>(targetDuration - frameDuration.count())));
+            }
+        }
+        lastRenderTime = std::chrono::steady_clock::now();
     }
 
     std::cout << "\n[FSR-NG] Cleaning up and shutting down gracefully...\n";

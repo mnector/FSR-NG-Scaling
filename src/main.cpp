@@ -115,7 +115,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Allocate neural upscaler resources
-    upscaler.Resize(capWidth, capHeight, capWidth, capHeight, presenter.format());
+    float initialScale = config.GetFloat("desktop_scale", 1.0f);
+    upscaler.Resize(capWidth, capHeight, capWidth, capHeight, presenter.format(), initialScale);
     upscaler.params.intensity = intensity;
     upscaler.params.splitScreen = splitScreen;
     upscaler.params.resetHistory = 1.0f;
@@ -176,11 +177,14 @@ int main(int argc, char* argv[]) {
         upscaler.params.splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
         std::string newMode = config.GetString("capture_mode", "desktop");
         windowModeActive = (newMode == "window");
+        float desktopScale = config.GetFloat("desktop_scale", 1.0f);
+        upscaler.Resize(upscaler.inWidth(), upscaler.inHeight(), GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN), presenter.format(), desktopScale);
         upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
                   << " Intensity=" << upscaler.params.intensity
                   << " Mode=" << (windowModeActive.load() ? "Window" : "Desktop")
-                  << " SplitScreen=" << upscaler.params.splitScreen << std::endl;
+                  << " SplitScreen=" << upscaler.params.splitScreen
+                  << " DesktopScale=" << desktopScale << std::endl;
     });
 
     overlay.Show(false);
@@ -249,7 +253,8 @@ int main(int argc, char* argv[]) {
         }
 
         if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight()) {
-            upscaler.Resize(currentInputW, currentInputH, currentOutputW, currentOutputH, presenter.format());
+            float desktopScale = config.GetFloat("desktop_scale", 1.0f);
+            upscaler.Resize(currentInputW, currentInputH, currentOutputW, currentOutputH, presenter.format(), desktopScale);
             overlay.SetPositionAndSize(overlayX, overlayY, currentOutputW, currentOutputH);
             presenter.Resize(currentOutputW, currentOutputH);
         } else if (windowModeActive.load()) {

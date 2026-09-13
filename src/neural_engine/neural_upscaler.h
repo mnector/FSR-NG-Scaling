@@ -16,7 +16,7 @@ public:
     ~NeuralUpscaler();
 
     bool Initialize();
-    bool Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM);
+    bool Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM, float desktopScale = 1.0f);
     void Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inputResource, int cropX = 0, int cropY = 0);
     void ResetHistory() { params.resetHistory = 1.0f; }
 
@@ -41,6 +41,7 @@ private:
     D3D12ComputeEngine engine_;
     Microsoft::WRL::ComPtr<ID3D12Resource> outputResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> cropResource_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> downscaledResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> dummyDepth_;
     Microsoft::WRL::ComPtr<ID3D12Resource> dummyMVs_;
     Microsoft::WRL::ComPtr<ID3D12Resource> dummyAlbedo_;
@@ -49,6 +50,7 @@ private:
     HMODULE hNvngx_ = nullptr;
     NVSDK_NGX_Parameter* ngxParameters_ = nullptr;
     NVSDK_NGX_Handle* ngxFeature_ = nullptr;
+    bool ngxInitialized_ = false;
 
     // NGX Function Pointers
     typedef NVSDK_NGX_Result(__cdecl* PFN_NVSDK_NGX_D3D12_Init_with_ProjectID)(const char*, NVSDK_NGX_EngineType, const char*, const wchar_t*, ID3D12Device*, const NVSDK_NGX_FeatureCommonInfo*, NVSDK_NGX_Version);
@@ -70,6 +72,8 @@ private:
     PFN_NVSDK_NGX_D3D12_EvaluateFeature pfnEvaluateFeature = nullptr;
 
     int inW_ = 0, inH_ = 0, outW_ = 0, outH_ = 0;
+    int scaledW_ = 0, scaledH_ = 0;
+    float desktopScale_ = 1.0f;
     DXGI_FORMAT format_ = DXGI_FORMAT_B8G8R8A8_UNORM;
 
     bool initialized_ = false;

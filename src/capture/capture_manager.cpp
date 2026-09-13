@@ -225,6 +225,9 @@ bool CaptureManager::CreateSharedTexture(uint32_t w, uint32_t h) {
     }
 
     d3d11SharedTexture_ = tex11;
+    D3D11_QUERY_DESC qdesc{};
+    qdesc.Query = D3D11_QUERY_EVENT;
+    d3d11Device_->CreateQuery(&qdesc, flushQuery_.ReleaseAndGetAddressOf());
 
     HANDLE sharedHandle = nullptr;
     Microsoft::WRL::ComPtr<IDXGIResource1> dxgiRes1;
@@ -276,6 +279,13 @@ bool CaptureManager::Start(HWND targetWindow) {
                     d3d11Context_->CopyResource(dstRes.Get(), desktopTex.Get());
                     if (keyedMutex_) keyedMutex_->ReleaseSync(0);
                     d3d11Context_->Flush();
+            if (flushQuery_) {
+                d3d11Context_->End(flushQuery_.Get());
+                BOOL data = FALSE;
+                while (d3d11Context_->GetData(flushQuery_.Get(), &data, sizeof(BOOL), 0) == S_FALSE) {
+                    SwitchToThread();
+                }
+            }
                     frameCount_++;
                 }
             }
@@ -343,6 +353,13 @@ ID3D12Resource* CaptureManager::AcquireLatestFrame(bool* newFrame) {
             d3d11Context_->CopyResource(dstRes.Get(), desktopTex.Get());
             if (keyedMutex_) keyedMutex_->ReleaseSync(0);
             d3d11Context_->Flush();
+            if (flushQuery_) {
+                d3d11Context_->End(flushQuery_.Get());
+                BOOL data = FALSE;
+                while (d3d11Context_->GetData(flushQuery_.Get(), &data, sizeof(BOOL), 0) == S_FALSE) {
+                    SwitchToThread();
+                }
+            }
             frameCount_++;
         }
     }

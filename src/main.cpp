@@ -129,7 +129,7 @@ int main(int argc, char* argv[]) {
         hotkeys.OnHotKey(w, l);
     });
     std::atomic<bool> scalingActive{ false }; // Disabled by default so mouse works
-    std::atomic<bool> windowModeActive{ false }; // Disabled per user request
+    std::atomic<bool> windowModeActive{ captureMode == "window" }; // Re-enabled window mode
     std::atomic<bool> menuModeActive{ false }; // False = Game Mode (Click-through)
     HWND lastForegroundHwnd = nullptr;
     std::string currentTargetTitle = "Desktop";
@@ -162,13 +162,20 @@ int main(int argc, char* argv[]) {
         std::cout << "\n[Hotkey] Scaling toggled: " << (scalingActive.load() ? "ENABLED (Visible)" : "DISABLED (Hidden)") << std::endl;
     });
 
+    // Ctrl+Alt+W: Toggle capture mode (Window / Desktop)
+    hotkeys.Register(toggleModeKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
+        windowModeActive = !windowModeActive.load();
+        upscaler.ResetHistory();
+        std::cout << "\n[Hotkey] Capture mode toggled to: " << (windowModeActive.load() ? "WINDOW" : "DESKTOP") << std::endl;
+    });
+
     // Ctrl+Alt+R: Live reload settings.ini
     hotkeys.Register(reloadKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         config.Reload();
         upscaler.params.intensity             = config.GetFloat("intensity", 1.00f);
         upscaler.params.splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
         std::string newMode = config.GetString("capture_mode", "desktop");
-        windowModeActive = false; // Forced false
+        windowModeActive = (newMode == "window");
         upscaler.ResetHistory();
         std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
                   << " Intensity=" << upscaler.params.intensity

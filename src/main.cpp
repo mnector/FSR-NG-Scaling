@@ -74,22 +74,8 @@ int main(int argc, char* argv[]) {
     device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, directAlloc.Get(), nullptr, IID_PPV_ARGS(directCmd.GetAddressOf()));
     directCmd->Close();
 
-    // 4. Initialize Capture Engine via DXGI Output Duplication
-    CaptureManager capture;
-    std::cout << "[Capture] Initializing DXGI Desktop Duplication...\n";
-    if (!capture.Initialize(device)) {
-        std::cerr << "[Capture] ERROR: " << capture.error() << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
-    }
-
-    if (!capture.Start(nullptr)) { // Full primary desktop capture
-        std::cerr << "[Capture] ERROR starting capture: " << capture.error() << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
-    }
-
-    uint32_t capWidth  = capture.width();
-    uint32_t capHeight = capture.height();
-    std::cout << "[Capture] Capture active: " << capWidth << "x" << capHeight << " (DXGI VRAM Direct)\n";
+    uint32_t capWidth = GetSystemMetrics(SM_CXSCREEN);
+    uint32_t capHeight = GetSystemMetrics(SM_CYSCREEN);
 
     // 5. Initialize Display Overlay Window
     uint32_t targetWidth  = capWidth;
@@ -201,6 +187,24 @@ int main(int argc, char* argv[]) {
               << "  * [Ctrl + Alt + M] : Toggle Menu Mode (Mouse) / Game Mode\n"
               << "  * [Ctrl + C]       : Exit application\n"
               << "=========================================================\n\n";
+
+
+    // 4. Initialize Capture Engine via DXGI Output Duplication
+    CaptureManager capture;
+    std::cout << "[Capture] Initializing DXGI Desktop Duplication...\n";
+    if (!capture.Initialize(device)) {
+        std::cerr << "[Capture] ERROR: " << capture.error() << std::endl;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+    }
+
+    if (!capture.Start(nullptr)) { // Full primary desktop capture
+        std::cerr << "[Capture] ERROR starting capture: " << capture.error() << std::endl;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+    }
+
+    capWidth  = capture.width();
+    capHeight = capture.height();
+    std::cout << "[Capture] Capture active: " << capWidth << "x" << capHeight << " (DXGI VRAM Direct)\n";
 
 
     // 8. Main Render Loop

@@ -59,7 +59,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline...\n";
     if (!upscaler.Initialize()) {
         std::cerr << "[Engine] ERROR: " << upscaler.error() << std::endl;
-        return 1;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
     std::cout << "[Engine] D3D12 Compute Pipeline ready." << std::endl;
 
@@ -79,12 +79,12 @@ int main(int argc, char* argv[]) {
     std::cout << "[Capture] Initializing DXGI Desktop Duplication...\n";
     if (!capture.Initialize(device)) {
         std::cerr << "[Capture] ERROR: " << capture.error() << std::endl;
-        return 1;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
     if (!capture.Start(nullptr)) { // Full primary desktop capture
         std::cerr << "[Capture] ERROR starting capture: " << capture.error() << std::endl;
-        return 1;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
     uint32_t capWidth  = capture.width();
@@ -105,7 +105,7 @@ int main(int argc, char* argv[]) {
     std::cout << "[Display] Creating borderless topmost overlay...\n";
     if (!overlay.Create("FSR-NG-Overlay", capWidth, capHeight)) {
         std::cerr << "[Display] ERROR: Failed to create overlay window.\n";
-        return 1;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
     float initialScale = config.GetFloat("desktop_scale", 1.0f);
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
     SwapchainPresenter presenter;
     if (!presenter.Initialize(overlay.hwnd(), device, directQueue, initialOutW, initialOutH)) {
         std::cerr << "[Display] ERROR: " << presenter.error() << std::endl;
-        return 1;
+        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
     // Allocate neural upscaler resources

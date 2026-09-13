@@ -21,7 +21,7 @@ public:
     CaptureManager();
     ~CaptureManager();
 
-    bool Initialize(ID3D12Device* d3d12Device);
+    bool Initialize(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue);
     bool Start(HWND targetWindow = nullptr);
     void Stop();
 
@@ -36,12 +36,26 @@ public:
 
 private:
     Microsoft::WRL::ComPtr<ID3D12Device> d3d12Device_;
-    Microsoft::WRL::ComPtr<ID3D12Resource> d3d12SharedResource_;
-    HANDLE serverProcess_ = nullptr;
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue_;
+    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAlloc_;
+    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList_;
+    Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
+    UINT64 fenceValue_ = 0;
+    HANDLE fenceEvent_ = nullptr;
+
+    Microsoft::WRL::ComPtr<ID3D12Resource> texture_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer_;
     
+    HDC screenDC_ = nullptr;
+    HDC memDC_ = nullptr;
+    HBITMAP bitmap_ = nullptr;
+    void* bitmapData_ = nullptr;
+
     uint32_t width_ = 1920;
     uint32_t height_ = 1080;
     std::string error_;
+
+    void WaitForGPU();
 };
 
 }

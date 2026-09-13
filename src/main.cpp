@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
     // 4. Initialize Capture Engine via DXGI Output Duplication
     CaptureManager capture;
     std::cout << "[Capture] Initializing DXGI Desktop Duplication...\n";
-    if (!capture.Initialize(device)) {
+    if (!capture.Initialize(device, directQueue)) {
         std::cerr << "[Capture] ERROR: " << capture.error() << std::endl;
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }

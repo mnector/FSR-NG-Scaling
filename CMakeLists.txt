@@ -83,5 +83,5 @@ foreach(DLL ${BACKEND_DLLS})
     )
 endforeach()
 
-add_executable(capture_server src/capture_server.cpp)
+
 

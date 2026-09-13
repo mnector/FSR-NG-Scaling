@@ -80,7 +80,7 @@ bool SwapchainPresenter::Initialize(HWND hwnd, ID3D12Device* device, ID3D12Comma
     scDesc.BufferCount = BufferCount;
     scDesc.Scaling = DXGI_SCALING_STRETCH;
     scDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    scDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
+    scDesc.AlphaMode = DXGI_ALPHA_MODE_IGNORE; // Force Opaque to prevent DWM double-composition overhead
     scDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING;
 
     Microsoft::WRL::ComPtr<IDXGISwapChain1> swapChain1;

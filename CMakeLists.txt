@@ -82,3 +82,6 @@ foreach(DLL ${BACKEND_DLLS})
         COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DLL} $<TARGET_FILE_DIR:FSR-NG-Scaling>/
     )
 endforeach()
+
+add_executable(capture_server src/capture_server.cpp)
+

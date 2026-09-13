@@ -27,6 +27,7 @@ BOOL WINAPI ConsoleCtrlHandler(DWORD signal) {
 }
 
 int main(int argc, char* argv[]) {
+    SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     (void)argc;
     (void)argv;
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);

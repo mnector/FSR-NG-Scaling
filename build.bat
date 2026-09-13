@@ -38,7 +38,7 @@ if %errorlevel% neq 0 (
 )
 
 echo =========================================================
-echo   Build completed successfully!
-echo   Executable located at: build\Release\FSR-NG-Scaling.exe
+echo   Build completed successfully
+echo   Executable located at: FSR-NG-Scaling.exe
 echo =========================================================
 exit /b 0

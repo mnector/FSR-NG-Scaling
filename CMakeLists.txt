@@ -43,6 +43,13 @@ set(HEADERS
 
 add_executable(FSR-NG-Scaling ${SOURCES} ${HEADERS})
 
+# Output the executable and all DLLs directly to the root folder
+set_target_properties(FSR-NG-Scaling PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_CURRENT_SOURCE_DIR}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+
 target_include_directories(FSR-NG-Scaling PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )

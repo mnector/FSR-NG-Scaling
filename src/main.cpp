@@ -107,18 +107,19 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    float initialScale = config.GetFloat("desktop_scale", 1.0f);
+    float initialOutScale = config.GetFloat("output_scale", 1.0f);
+    int initialOutW = static_cast<int>(capWidth * initialOutScale);
+    int initialOutH = static_cast<int>(capHeight * initialOutScale);
+
     // 6. Initialize SwapChain Presenter (DXGI Flip Discard)
     SwapchainPresenter presenter;
-    if (!presenter.Initialize(overlay.hwnd(), device, directQueue, capWidth, capHeight)) {
+    if (!presenter.Initialize(overlay.hwnd(), device, directQueue, initialOutW, initialOutH)) {
         std::cerr << "[Display] ERROR: " << presenter.error() << std::endl;
         return 1;
     }
 
     // Allocate neural upscaler resources
-    float initialScale = config.GetFloat("desktop_scale", 1.0f);
-    float initialOutScale = config.GetFloat("output_scale", 1.0f);
-    int initialOutW = static_cast<int>(capWidth * initialOutScale);
-    int initialOutH = static_cast<int>(capHeight * initialOutScale);
     upscaler.Resize(capWidth, capHeight, initialOutW, initialOutH, presenter.format(), initialScale);
     upscaler.params.intensity = intensity;
     upscaler.params.splitScreen = splitScreen;
@@ -259,7 +260,7 @@ int main(int argc, char* argv[]) {
             currentY = 0;
         }
 
-        if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight() || currentOutputW != upscaler.outWidth()) {
+        if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight() || currentOutputW != upscaler.outWidth() || currentOutputW != presenter.width() || currentOutputH != presenter.height()) {
             float desktopScale = config.GetFloat("desktop_scale", 1.0f);
             upscaler.Resize(currentInputW, currentInputH, currentOutputW, currentOutputH, presenter.format(), desktopScale);
             overlay.SetPositionAndSize(overlayX, overlayY, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));

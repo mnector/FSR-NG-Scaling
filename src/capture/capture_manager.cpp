@@ -278,7 +278,7 @@ bool CaptureManager::Start(HWND targetWindow) {
                     if (keyedMutex_) keyedMutex_->AcquireSync(0, INFINITE);
                     d3d11Context_->CopyResource(dstRes.Get(), desktopTex.Get());
                     if (keyedMutex_) keyedMutex_->ReleaseSync(0);
-                    d3d11Context_->Flush();
+                    d3d11Context_->Flush(); Sleep(2);
             if (flushQuery_) {
                 d3d11Context_->End(flushQuery_.Get());
                 BOOL data = FALSE;
@@ -352,7 +352,7 @@ ID3D12Resource* CaptureManager::AcquireLatestFrame(bool* newFrame) {
             if (keyedMutex_) keyedMutex_->AcquireSync(0, INFINITE);
             d3d11Context_->CopyResource(dstRes.Get(), desktopTex.Get());
             if (keyedMutex_) keyedMutex_->ReleaseSync(0);
-            d3d11Context_->Flush();
+            d3d11Context_->Flush(); Sleep(2);
             if (flushQuery_) {
                 d3d11Context_->End(flushQuery_.Get());
                 BOOL data = FALSE;

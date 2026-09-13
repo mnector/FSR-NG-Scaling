@@ -196,6 +196,7 @@ bool CaptureManager::CreateSharedTexture(uint32_t w, uint32_t h) {
 
     d3d11SharedTexture_.Reset();
     d3d12SharedResource_.Reset();
+    d3d12KeyedMutex_.Reset();
     keyedMutex_.Reset();
 
     D3D11_TEXTURE2D_DESC desc11{};
@@ -301,10 +302,12 @@ void CaptureManager::Stop() {
     keyedMutex_.Reset();
     duplication_.Reset();
     d3d12SharedResource_.Reset();
+    d3d12KeyedMutex_.Reset();
     d3d11SharedTexture_.Reset();
 }
 
-ID3D12Resource* CaptureManager::AcquireLatestFrame() {
+ID3D12Resource* CaptureManager::AcquireLatestFrame(bool* newFrame) {
+    if (newFrame) *newFrame = false;
     if (!active_ || !duplication_ || !d3d11Context_ || !d3d11SharedTexture_) {
         return nullptr;
     }
@@ -332,6 +335,7 @@ ID3D12Resource* CaptureManager::AcquireLatestFrame() {
     Microsoft::WRL::ComPtr<ID3D11Texture2D> desktopTex;
     hr = desktopResource.As(&desktopTex);
     if (SUCCEEDED(hr)) {
+        if (newFrame) *newFrame = true;
         Microsoft::WRL::ComPtr<ID3D11Resource> dstRes;
         d3d11SharedTexture_.As(&dstRes);
         if (dstRes) {

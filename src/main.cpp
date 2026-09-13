@@ -271,8 +271,9 @@ int main(int argc, char* argv[]) {
         }
 
         // B. Acquire frame from GPU VRAM
-        ID3D12Resource* inputFrame = capture.AcquireLatestFrame();
-        if (!inputFrame) {
+        bool newFrame = false;
+        ID3D12Resource* inputFrame = capture.AcquireLatestFrame(&newFrame);
+        if (!inputFrame || !newFrame) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
@@ -281,7 +282,9 @@ int main(int argc, char* argv[]) {
         directAlloc->Reset();
         directCmd->Reset(directAlloc.Get(), nullptr);
 
+        if (capture.GetD3D12KeyedMutex()) capture.GetD3D12KeyedMutex()->AcquireSync(0, INFINITE);
         upscaler.Process(directCmd.Get(), inputFrame, currentX, currentY);
+        if (capture.GetD3D12KeyedMutex()) capture.GetD3D12KeyedMutex()->ReleaseSync(0);
 
         directCmd->Close();
         ID3D12CommandList* lists[] = { directCmd.Get() };

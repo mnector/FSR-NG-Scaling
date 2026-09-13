@@ -38,7 +38,8 @@ public:
     void Stop();
 
     // Acquire the latest available frame as a D3D12 resource
-    ID3D12Resource* AcquireLatestFrame();
+    ID3D12Resource* AcquireLatestFrame(bool* newFrame = nullptr);
+    IDXGIKeyedMutex* GetD3D12KeyedMutex() { return d3d12KeyedMutex_.Get(); }
 
     // Query active foreground window client rect in screen coordinates (excluding titlebar/borders)
     WindowClientInfo GetForegroundClientArea(HWND excludeHwnd = nullptr);
@@ -59,6 +60,7 @@ private:
     Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11Context_;
     Microsoft::WRL::ComPtr<ID3D11Query> flushQuery_;
     Microsoft::WRL::ComPtr<IDXGIKeyedMutex> keyedMutex_;
+    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> d3d12KeyedMutex_;
     Microsoft::WRL::ComPtr<IDXGIOutputDuplication> duplication_;
     Microsoft::WRL::ComPtr<ID3D12Resource> d3d12SharedResource_;
     Microsoft::WRL::ComPtr<IUnknown> d3d11SharedTexture_;

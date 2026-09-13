@@ -53,7 +53,7 @@ private:
 
     int width_ = 0;
     int height_ = 0;
-    DXGI_FORMAT format_ = DXGI_FORMAT_B8G8R8A8_UNORM;
+    DXGI_FORMAT format_ = DXGI_FORMAT_R8G8B8A8_UNORM;
     std::string error_;
 };
 

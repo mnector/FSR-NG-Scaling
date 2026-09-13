@@ -67,6 +67,7 @@ add_custom_command(TARGET FSR-NG-Scaling POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_amd_pass2.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_amd_pass3.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_on_amd_weights.bin $<TARGET_FILE_DIR:FSR-NG-Scaling>/
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/EnvyDynamicPacing.ps1 $<TARGET_FILE_DIR:FSR-NG-Scaling>/
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/Launch-Envy.bat $<TARGET_FILE_DIR:FSR-NG-Scaling>/
+    COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:FSR-NG-Scaling>/plugins
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/EnvyDynamicPacing.asi $<TARGET_FILE_DIR:FSR-NG-Scaling>/plugins/
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/EnvyDynamicPacing.asi $<TARGET_FILE_DIR:FSR-NG-Scaling>/
 )

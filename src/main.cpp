@@ -286,9 +286,9 @@ int main(int argc, char* argv[]) {
         directAlloc->Reset();
         directCmd->Reset(directAlloc.Get(), nullptr);
 
-        if (capture.GetD3D12KeyedMutex()) capture.GetD3D12KeyedMutex()->AcquireSync(0, INFINITE);
+        
         upscaler.Process(directCmd.Get(), inputFrame, currentX, currentY);
-        if (capture.GetD3D12KeyedMutex()) capture.GetD3D12KeyedMutex()->ReleaseSync(0);
+        
 
         directCmd->Close();
         ID3D12CommandList* lists[] = { directCmd.Get() };

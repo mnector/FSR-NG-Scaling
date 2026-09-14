@@ -22,7 +22,7 @@ endif()
 set(SOURCES
     src/main.cpp
     src/capture/capture_manager.cpp
-    src/neural_engine/d3d12_compute_engine.cpp
+    
     src/neural_engine/neural_upscaler.cpp
     src/display/overlay_window.cpp
     src/display/swapchain_presenter.cpp
@@ -33,7 +33,7 @@ set(SOURCES
 set(HEADERS
     src/capture/capture_manager.h
     src/capture/frame_pool.h
-    src/neural_engine/d3d12_compute_engine.h
+    
     src/neural_engine/neural_upscaler.h
     src/display/overlay_window.h
     src/display/swapchain_presenter.h

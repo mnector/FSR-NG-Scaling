@@ -11,11 +11,11 @@ CaptureManager::~CaptureManager() {
     if (fenceEvent_) CloseHandle(fenceEvent_);
 }
 
-bool CaptureManager::Initialize(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue) {
+bool CaptureManager::Initialize(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue, uint32_t captureWidth, uint32_t captureHeight) {
     d3d12Device_ = d3d12Device;
     commandQueue_ = commandQueue;
-    width_ = GetSystemMetrics(SM_CXSCREEN);
-    height_ = GetSystemMetrics(SM_CYSCREEN);
+    width_ = captureWidth;
+    height_ = captureHeight;
 
     if (FAILED(d3d12Device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAlloc_)))) return false;
     if (FAILED(d3d12Device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAlloc_.Get(), nullptr, IID_PPV_ARGS(&commandList_)))) return false;
@@ -106,7 +106,8 @@ ID3D12Resource* CaptureManager::AcquireLatestFrame(bool* newFrame) {
     if (newFrame) *newFrame = true;
 
     // Capture screen via GDI
-    BitBlt(memDC_, 0, 0, width_, height_, screenDC_, 0, 0, SRCCOPY);
+    SetStretchBltMode(memDC_, HALFTONE);
+    StretchBlt(memDC_, 0, 0, width_, height_, screenDC_, 0, 0, GetDeviceCaps(screenDC_, DESKTOPHORZRES), GetDeviceCaps(screenDC_, DESKTOPVERTRES), SRCCOPY);
 
     // Map upload buffer
     void* mappedData = nullptr;

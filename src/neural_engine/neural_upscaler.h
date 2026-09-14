@@ -1,5 +1,7 @@
 #pragma once
-#include "d3d12_compute_engine.h"
+#include <d3d12.h>
+#include <dxgi1_6.h>
+#include <wrl/client.h>
 #include <string>
 #include <vector>
 #include <memory>
@@ -26,11 +28,17 @@ public:
     int outWidth() const { return outW_; }
     int outHeight() const { return outH_; }
 
-    D3D12ComputeEngine& engine() { return engine_; }
+    ID3D12Device* device() const { return device_.Get(); }
+    ID3D12CommandQueue* directQueue() const { return directQueue_.Get(); }
     bool initialized() const { return initialized_; }
     const std::string& error() const { return error_; }
 
-    ScaleParams params;
+    struct UpscalerParams {
+        
+        float splitScreen = 0.0f;
+        float resetHistory = 0.0f;
+        
+    } params;
 
 private:
     void ShutdownNGX();
@@ -38,7 +46,8 @@ private:
     void CreateOutputResource(int w, int h, DXGI_FORMAT format);
     void TransitionResource(ID3D12GraphicsCommandList* cmd, ID3D12Resource* res, D3D12_RESOURCE_STATES before, D3D12_RESOURCE_STATES after);
 
-    D3D12ComputeEngine engine_;
+    Microsoft::WRL::ComPtr<ID3D12Device> device_;
+    Microsoft::WRL::ComPtr<ID3D12CommandQueue> directQueue_;
     Microsoft::WRL::ComPtr<ID3D12Resource> outputResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> cropResource_;
     Microsoft::WRL::ComPtr<ID3D12Resource> downscaledResource_;
@@ -81,3 +90,4 @@ private:
 };
 
 } // namespace fsrng
+

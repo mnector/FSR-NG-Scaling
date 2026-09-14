@@ -21,7 +21,7 @@ public:
     CaptureManager();
     ~CaptureManager();
 
-    bool Initialize(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue);
+    bool Initialize(ID3D12Device* d3d12Device, ID3D12CommandQueue* commandQueue, uint32_t captureWidth, uint32_t captureHeight);
     bool Start(HWND targetWindow = nullptr);
     void Stop();
 

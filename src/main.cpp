@@ -32,40 +32,31 @@ int main(int argc, char* argv[]) {
     (void)argv;
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
-    std::cout << "=========================================================\n";
-    std::cout << "  FSR-NG-Scaling: Lossless Neural Scaler for Windows 11   \n";
-    std::cout << "  AMD RDNA AI / DirectX 12 Isolated Compute Engine        \n";
-    std::cout << "=========================================================\n\n";
+    std::cout << "=========================================================" << std::endl;
+    std::cout << "  FSR-NG-Scaling: Lossless Neural Scaler for Windows 11   " << std::endl;
+    std::cout << "  DirectX 12 / DLSS Native Desktop Scaling Engine        " << std::endl;
+    std::cout << "=========================================================\n" << std::endl;
 
     // 1. Load Configuration
     ConfigReader config("config/settings.ini");
-    float intensity             = config.GetFloat("intensity", 1.00f);
-    float splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
-    int   scaleFactor           = config.GetInt("scale_factor", 2);
-    int   toggleKey             = config.GetInt("toggle_key", 83); // 'S'
-    int   reloadKey             = config.GetInt("reload_key", 82); // 'R'
-    int   toggleModeKey         = config.GetInt("toggle_mode_key", 87); // 'W'
-    std::string captureMode     = config.GetString("capture_mode", "desktop");
-    std::string modelPath       = config.GetString("model_path", "models/fsr_ng_model.safetensors");
-    std::string expectedSha     = config.GetString("expected_sha256", "");
+    float splitScreen = config.GetFloat("debug_split_screen", 0.0f);
+    int toggleKey     = config.GetInt("toggle_key", 83); // 'S'
+    int reloadKey     = config.GetInt("reload_key", 82); // 'R'
+    int fpsLimit      = config.GetInt("fps_limit", 30);
 
-    std::cout << "[Config] Scale Factor: " << scaleFactor << "x\n";
-    std::cout << "[Config] NR Intensity: " << intensity << "\n";
-    std::cout << "[Config] Initial Capture Mode: " << captureMode << "\n";
-    std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "\n";
+    std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "" << std::endl;
 
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
     NeuralUpscaler upscaler;
-    std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline...\n";
+    std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline..." << std::endl;
     if (!upscaler.Initialize()) {
         std::cerr << "[Engine] ERROR: " << upscaler.error() << std::endl;
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
     std::cout << "[Engine] D3D12 Compute Pipeline ready." << std::endl;
 
-    ID3D12Device* device = upscaler.engine().device();
-    ID3D12CommandQueue* computeQueue = upscaler.engine().queue();
-    ID3D12CommandQueue* directQueue  = upscaler.engine().directQueue();
+    ID3D12Device* device = upscaler.device();
+    ID3D12CommandQueue* directQueue  = upscaler.directQueue();
 
     // 3. Command Allocator and List
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> directAlloc;
@@ -77,76 +68,87 @@ int main(int argc, char* argv[]) {
     uint32_t capWidth = GetSystemMetrics(SM_CXSCREEN);
     uint32_t capHeight = GetSystemMetrics(SM_CYSCREEN);
 
-    // 5. Initialize Display Overlay Window
-    uint32_t targetWidth  = capWidth;
-    uint32_t targetHeight = capHeight;
-    if (scaleFactor > 1) {
-        targetWidth  = capWidth * scaleFactor;
-        targetHeight = capHeight * scaleFactor;
-    }
-
-    // EmojiWidget disabled per user request
-
+    // 4. Initialize Display Overlay Window
     OverlayWindow overlay;
-    std::cout << "[Display] Creating borderless topmost overlay...\n";
+    std::cout << "[Display] Creating borderless topmost overlay..." << std::endl;
     if (!overlay.Create("FSR-NG-Overlay", capWidth, capHeight)) {
-        std::cerr << "[Display] ERROR: Failed to create overlay window.\n";
+        std::cerr << "[Display] ERROR: Failed to create overlay window." << std::endl;
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
-    float initialScale = config.GetFloat("desktop_scale", 1.0f);
-    float initialOutScale = config.GetFloat("output_scale", 1.0f);
-    int initialOutW = static_cast<int>(capWidth * initialOutScale);
-    int initialOutH = static_cast<int>(capHeight * initialOutScale);
+    auto calculateScales = [&](int& dlssInputW, int& dlssInputH) {
+        float dpiScaleFactor = 1.0f;
+        if (config.GetBool("auto_dpi_scale", true)) {
+            UINT dpi = GetDpiForSystem();
+            if (dpi > 0) dpiScaleFactor = 96.0f / static_cast<float>(dpi);
+        }
 
-    // 6. Initialize SwapChain Presenter (DXGI Flip Discard)
+        std::string dlssMode = config.GetString("dlss_mode", "auto");
+        std::transform(dlssMode.begin(), dlssMode.end(), dlssMode.begin(), ::tolower);
+        
+        float dlssScale = 1.0f;
+        if (dlssMode == "quality") dlssScale = 0.666f;
+        else if (dlssMode == "balanced") dlssScale = 0.580f;
+        else if (dlssMode == "performance") dlssScale = 0.500f;
+        else if (dlssMode == "ultra_performance") dlssScale = 0.333f;
+        else if (dlssMode == "auto") {
+            dlssScale = (capWidth >= 3840) ? 0.5f : 0.666f;
+        }
+
+        float finalInputScale = dpiScaleFactor * dlssScale;
+        dlssInputW = static_cast<int>(capWidth * finalInputScale);
+        dlssInputH = static_cast<int>(capHeight * finalInputScale);
+        
+        std::cout << "[Scaling] DLSS Mode: " << dlssMode << " | DPI Scale: " << dpiScaleFactor << " | DLSS Input: " << dlssInputW << "x" << dlssInputH << std::endl;
+    };
+
+    int dlssInputW, dlssInputH;
+    calculateScales(dlssInputW, dlssInputH);
+
+    // 5. Initialize SwapChain Presenter (DXGI Flip Discard)
+    
     SwapchainPresenter presenter;
-    if (!presenter.Initialize(overlay.hwnd(), device, directQueue, initialOutW, initialOutH)) {
+    
+    if (!presenter.Initialize(overlay.hwnd(), device, directQueue, capWidth, capHeight)) {
         std::cerr << "[Display] ERROR: " << presenter.error() << std::endl;
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
     // Allocate neural upscaler resources
-    upscaler.Resize(capWidth, capHeight, initialOutW, initialOutH, presenter.format(), initialScale);
-    upscaler.params.intensity = intensity;
+    
+    upscaler.Resize(dlssInputW, dlssInputH, capWidth, capHeight, presenter.format(), 1.0f);
+    
     upscaler.params.splitScreen = splitScreen;
     upscaler.params.resetHistory = 1.0f;
 
     // Start with overlay in full click-through mode
+    
     overlay.SetClickThrough(true);
 
-    // 7. Register Global Hotkeys
+    // 6. Register Global Hotkeys
+    
     HotkeyManager hotkeys(overlay.hwnd());
-    overlay.SetHotKeyCallback([&](WPARAM w, LPARAM l) {
-        hotkeys.OnHotKey(w, l);
-    });
-    std::atomic<bool> scalingActive{ false }; // Disabled by default so mouse works
-    std::atomic<bool> windowModeActive{ captureMode == "window" }; // Re-enabled window mode
-    std::atomic<bool> menuModeActive{ false }; // False = Game Mode (Click-through)
-    HWND lastForegroundHwnd = nullptr;
-    std::string currentTargetTitle = "Desktop";
+    overlay.SetHotKeyCallback([&](WPARAM w, LPARAM l) { hotkeys.OnHotKey(w, l); });
+    std::atomic<bool> scalingActive{ false };
+    std::atomic<bool> menuModeActive{ false };
 
-    // Initialize as Click-Through (Game Mode)
-    overlay.SetClickThrough(true);
-
-    // Ctrl+Alt+M: Toggle Menu Mode (Interact with OptiScaler GUI)
+    
     hotkeys.Register('M', HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         menuModeActive = !menuModeActive.load();
         overlay.SetClickThrough(!menuModeActive.load());
         
         if (menuModeActive.load()) {
             std::cout << "\n[Hotkey] MENU MODE: Mouse unlocked for OptiScaler GUI. (Game clicks BLOCKED)" << std::endl;
-            // Also force overlay to be visible so they can see the menu
             if (!scalingActive.load()) {
                 scalingActive = true;
                 overlay.Show(true);
             }
         } else {
-            std::cout << "\n[Hotkey] GAME MODE: Mouse click-through ENABLED. (GUI will be invisible)" << std::endl;
+            std::cout << "\n[Hotkey] GAME MODE: Mouse click-through ENABLED. (GUI clicks ignored)" << std::endl;
         }
     });
 
-    // Ctrl+Alt+S: Toggle live scaling
+    
     hotkeys.Register(toggleKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         scalingActive = !scalingActive.load();
         overlay.Show(scalingActive.load());
@@ -154,31 +156,23 @@ int main(int argc, char* argv[]) {
         std::cout << "\n[Hotkey] Scaling toggled: " << (scalingActive.load() ? "ENABLED (Visible)" : "DISABLED (Hidden)") << std::endl;
     });
 
-    // Ctrl+Alt+W: Toggle capture mode (Window / Desktop)
-    hotkeys.Register(toggleModeKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
-        windowModeActive = !windowModeActive.load();
-        upscaler.ResetHistory();
-        std::cout << "\n[Hotkey] Capture mode toggled to: " << (windowModeActive.load() ? "WINDOW" : "DESKTOP") << std::endl;
-    });
-
-    // Ctrl+Alt+R: Live reload settings.ini
+    
     hotkeys.Register(reloadKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         config.Reload();
-        upscaler.params.intensity             = config.GetFloat("intensity", 1.00f);
-        upscaler.params.splitScreen           = config.GetFloat("debug_split_screen", 0.0f);
-        std::string newMode = config.GetString("capture_mode", "desktop");
-        windowModeActive = (newMode == "window");
-        float desktopScale = config.GetFloat("desktop_scale", 1.0f);
-        float rOutScale = config.GetFloat("output_scale", 1.0f);
-        upscaler.Resize(upscaler.inWidth(), upscaler.inHeight(), static_cast<int>(GetSystemMetrics(SM_CXSCREEN) * rOutScale), static_cast<int>(GetSystemMetrics(SM_CYSCREEN) * rOutScale), presenter.format(), desktopScale);
-        upscaler.ResetHistory();
-        std::cout << "\n[Hotkey] Settings reloaded live from settings.ini:"
-                  << " Intensity=" << upscaler.params.intensity
-                  << " Mode=" << (windowModeActive.load() ? "Window" : "Desktop")
-                  << " SplitScreen=" << upscaler.params.splitScreen
-                  << " DesktopScale=" << desktopScale << std::endl;
+        upscaler.params.splitScreen = config.GetFloat("debug_split_screen", 0.0f);
+        fpsLimit = config.GetInt("fps_limit", 30);
+        
+        int newInW, newInH;
+        calculateScales(newInW, newInH);
+        
+        if (newInW != upscaler.inWidth() || newInH != upscaler.inHeight()) {
+            std::cout << "[Hotkey] Requires restart to change capture resolution. (DLSS Input resizing at runtime is not supported)." << std::endl;
+        }
+        
+        std::cout << "\n[Hotkey] Settings reloaded live." << std::endl;
     });
 
+    
     overlay.Show(false);
     std::cout << "\n=========================================================\n"
               << "  FSR-NG Active! (STARTED HIDDEN)\n"
@@ -186,13 +180,15 @@ int main(int argc, char* argv[]) {
               << "  * [Ctrl + Alt + S] : Toggle Scaling Overlay On/Off\n"
               << "  * [Ctrl + Alt + M] : Toggle Menu Mode (Mouse) / Game Mode\n"
               << "  * [Ctrl + C]       : Exit application\n"
-              << "=========================================================\n\n";
+              << "=========================================================\n" << std::endl;
 
-
-    // 4. Initialize Capture Engine via DXGI Output Duplication
+    // 7. Initialize Capture Engine via DXGI Output Duplication
+    
+    
     CaptureManager capture;
-    std::cout << "[Capture] Initializing DXGI Desktop Duplication...\n";
-    if (!capture.Initialize(device, directQueue)) {
+    std::cout << "[Capture] Initializing DXGI Desktop Duplication..." << std::endl; 
+    
+    if (!capture.Initialize(device, directQueue, dlssInputW, dlssInputH)) {
         std::cerr << "[Capture] ERROR: " << capture.error() << std::endl;
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
@@ -202,79 +198,21 @@ int main(int argc, char* argv[]) {
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
 
-    capWidth  = capture.width();
-    capHeight = capture.height();
-    std::cout << "[Capture] Capture active: " << capWidth << "x" << capHeight << " (DXGI VRAM Direct)\n";
-
+    std::cout << "[Capture] Capture active: " << capture.width() << "x" << capture.height() << " (DXGI VRAM Direct)" << std::endl;
 
     // 8. Main Render Loop
     auto lastFpsTime = std::chrono::steady_clock::now();
     uint64_t frameCounter = 0;
-    uint64_t totalFramesRendered = 0;
     float currentFps = 0.0f;
 
     while (g_running.load()) {
-        //emoji.Update();
-        if (!overlay.ProcessMessages()) {
-            break; // WM_QUIT
-        }
+        if (!overlay.ProcessMessages()) break;
 
         if (!scalingActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;
         }
 
-        // A. Handle Dynamic Foreground Window Crop
-        int currentInputW = capWidth;
-        int currentInputH = capHeight;
-        int currentX = 0;
-        int currentY = 0;
-
-        if (windowModeActive.load()) {
-            WindowClientInfo wInfo = capture.GetForegroundClientArea(overlay.hwnd());
-            if (wInfo.valid) {
-                currentInputW = std::clamp<int>(static_cast<int>(wInfo.width), 16, capWidth);
-                currentInputH = std::clamp<int>(static_cast<int>(wInfo.height), 16, capHeight);
-                currentX = wInfo.x;
-                currentY = wInfo.y;
-
-                if (wInfo.hwnd != lastForegroundHwnd) {
-                    lastForegroundHwnd = wInfo.hwnd;
-                    currentTargetTitle = wInfo.title.empty() ? "Target Window" : wInfo.title;
-                    upscaler.ResetHistory();
-                    std::cout << "\n[Target Window] Active: \"" << currentTargetTitle
-                              << "\" (" << currentInputW << "x" << currentInputH << ")" << std::endl;
-                }
-            }
-        } else {
-            lastForegroundHwnd = nullptr;
-        }
-
-        float outputScale = config.GetFloat("output_scale", 1.0f);
-    int currentOutputW = static_cast<int>(GetSystemMetrics(SM_CXSCREEN) * outputScale);
-        int currentOutputH = static_cast<int>(GetSystemMetrics(SM_CYSCREEN) * outputScale);
-    if (currentOutputW < 16) currentOutputW = 16;
-    if (currentOutputH < 16) currentOutputH = 16;
-        int overlayX = 0;
-        int overlayY = 0;
-
-        if (!windowModeActive.load()) {
-            currentInputW = capWidth;
-            currentInputH = capHeight;
-            currentX = 0;
-            currentY = 0;
-        }
-
-        if (currentInputW != upscaler.inWidth() || currentInputH != upscaler.inHeight() || currentOutputW != upscaler.outWidth() || currentOutputW != presenter.width() || currentOutputH != presenter.height()) {
-            float desktopScale = config.GetFloat("desktop_scale", 1.0f);
-            upscaler.Resize(currentInputW, currentInputH, currentOutputW, currentOutputH, presenter.format(), desktopScale);
-            overlay.SetPositionAndSize(overlayX, overlayY, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
-            presenter.Resize(currentOutputW, currentOutputH);
-        } else if (windowModeActive.load()) {
-            overlay.SetPositionAndSize(overlayX, overlayY, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
-        }
-
-        // B. Acquire frame from GPU VRAM
         bool newFrame = false;
         ID3D12Resource* inputFrame = capture.AcquireLatestFrame(&newFrame);
         if (!inputFrame || !newFrame) {
@@ -282,21 +220,15 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        // C. Execute Neural Upscaler Compute Pass
         directAlloc->Reset();
         directCmd->Reset(directAlloc.Get(), nullptr);
 
-        
-        upscaler.Process(directCmd.Get(), inputFrame, currentX, currentY);
-        
+        upscaler.Process(directCmd.Get(), inputFrame, 0, 0);
 
         directCmd->Close();
         ID3D12CommandList* lists[] = { directCmd.Get() };
         directQueue->ExecuteCommandLists(1, lists);
 
-        totalFramesRendered++;
-
-        // D. Present via Flip Discard SwapChain
         if (upscaler.output()) {
             presenter.Present(upscaler.output(), nullptr, true);
         }
@@ -308,33 +240,26 @@ int main(int argc, char* argv[]) {
             currentFps = frameCounter / elapsed.count();
             frameCounter = 0;
             lastFpsTime = now;
-
-            std::cout << "\r[Running] FPS: " << std::fixed << std::setprecision(1) << currentFps
-                      << " | Mode: " << (upscaler.params.modeWindow > 0.5f ? "WINDOW" : "DESKTOP")
-                      << " | Out: " << upscaler.outWidth() << "x" << upscaler.outHeight()
-                      << " | Menu: OptiScaler Native"
-                      << std::flush;
         }
 
-        // FPS Limiter
-        static auto lastRenderTime = std::chrono::steady_clock::now();
-        auto currentRenderTime = std::chrono::steady_clock::now();
-        std::chrono::duration<double, std::milli> frameDuration = currentRenderTime - lastRenderTime;
-        
-        float fpsLimit = config.GetFloat("fps_limit", 30.0f);
-        if (fpsLimit > 0.0f) {
-            double targetDuration = 1000.0 / fpsLimit;
-            if (frameDuration.count() < targetDuration) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<long long>(targetDuration - frameDuration.count())));
+        if (fpsLimit > 0) {
+            float targetFrameTimeMs = 1000.0f / fpsLimit;
+            auto frameEnd = std::chrono::steady_clock::now();
+            std::chrono::duration<float, std::milli> frameElapsed = frameEnd - now;
+            if (frameElapsed.count() < targetFrameTimeMs) {
+                int sleepTime = static_cast<int>(targetFrameTimeMs - frameElapsed.count());
+                if (sleepTime > 0) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(sleepTime));
+                }
             }
         }
-        lastRenderTime = std::chrono::steady_clock::now();
     }
 
-    std::cout << "\n[FSR-NG] Cleaning up and shutting down gracefully...\n";
+    std::cout << "\n[FSR-NG] Cleaning up and shutting down gracefully..." << std::endl;
+    
     overlay.Show(false);
     capture.Stop();
 
-    std::cout << "[FSR-NG] Terminated successfully.\n";
+    std::cout << "[FSR-NG] Terminated successfully." << std::endl;
     return 0;
 }

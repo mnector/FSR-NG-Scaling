@@ -18,6 +18,11 @@ CMakeUserPresets.json
 *.exe
 *.pdb
 *.bmp
+*.log
+*.bin
+*.asi
+plugins/
+OptiScaler.ini
 
 # Pesos y modelos neuronales (evitar límites de GitHub y copyright)
 *.safetensors
@@ -32,3 +37,6 @@ nvngx_dlssnr.dll
 !models/model_manifest.json
 backend/*.dll
 backend/*.bin
+backend/*.asi
+backend/*.ini
+backend/*.log

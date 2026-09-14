@@ -23,6 +23,7 @@ CMakeUserPresets.json
 *.asi
 plugins/
 OptiScaler.ini
+releases/
 
 # Pesos y modelos neuronales (evitar límites de GitHub y copyright)
 *.safetensors

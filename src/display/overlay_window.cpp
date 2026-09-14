@@ -116,9 +116,16 @@ void OverlayWindow::Show(bool visible) {
     isVisible_ = visible;
     if (visible) {
         ShowWindow(hwnd_, SW_SHOWNOACTIVATE);
-        // Do not force focus here, leave it to Menu Mode
+        // Force immediate topmost Z-order placement
+        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     } else {
         ShowWindow(hwnd_, SW_HIDE);
+    }
+}
+
+void OverlayWindow::BringToTop() {
+    if (hwnd_ && isVisible_) {
+        SetWindowPos(hwnd_, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 }
 

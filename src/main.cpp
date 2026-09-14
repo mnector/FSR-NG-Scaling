@@ -234,6 +234,11 @@ int main(int argc, char* argv[]) {
         }
 
         frameCounter++;
+        // Continuous Z-order heartbeat: reaffirm HWND_TOPMOST so no background or activated windows stick out
+        if (frameCounter % 15 == 0) {
+            overlay.BringToTop();
+        }
+
         auto now = std::chrono::steady_clock::now();
         std::chrono::duration<float> elapsed = now - lastFpsTime;
         if (elapsed.count() >= 1.0f) {

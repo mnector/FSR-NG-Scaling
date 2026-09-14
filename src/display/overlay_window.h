@@ -16,6 +16,9 @@ public:
     // Show / Hide
     void Show(bool visible = true);
 
+    // Re-assert topmost Z-order so external windows never stick out above the overlay
+    void BringToTop();
+
     // Set click-through (pass input through to underlying game)
     void SetClickThrough(bool enable);
 

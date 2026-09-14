@@ -1,10 +1,11 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/mnector/FSR-NG-Scaling/main/test_upscaled.bmp" alt="FSR-NG-Scaling Banner" width="400" onerror="this.style.display='none'">
-  <h1>🌟 FSR-NG-Scaling 🌟<br><sub>Powered by Envy-Diamond 💎 / OptiScaler</sub></h1>
+  <h1>🌟 FSR-NG-Scaling 🌟<br><sub>Powered by Envy-Diamond-2 💎 & OptiScaler</sub></h1>
   
   <p><strong>Next-Gen Lossless Real-Time Neural Scaler & Desktop Overlay for Windows 11</strong></p>
   
   <a href="https://paypal.me/mnecstream"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate"></a>
+  <img src="https://img.shields.io/badge/Engine-Envy--Diamond--2%20💎-blueviolet?style=for-the-badge" alt="Envy-Diamond-2">
   <img src="https://img.shields.io/badge/Platform-Windows%2011-blue?style=for-the-badge&logo=windows" alt="Windows 11">
   <img src="https://img.shields.io/badge/API-DirectX%2012-red?style=for-the-badge" alt="DirectX 12">
   <img src="https://img.shields.io/badge/Architecture-C%2B%2B20%20x64-brightgreen?style=for-the-badge" alt="C++20 x64">
@@ -14,12 +15,13 @@
 <br/>
 
 > [!NOTE]  
-> **FSR-NG-Scaling** is a standalone, ultra-low latency real-time neural upscaler for Windows 11 (C++20 / DirectX 12). Inspired by Lossless Scaling and Magpie, it captures games and desktop windows, applies hardware-accelerated generative scaling and temporal reconstruction on AMD Radeon / NVIDIA GPUs, and presents the result through a transparent, click-through borderless overlay.
+> **FSR-NG-Scaling** is a standalone, ultra-low latency real-time neural upscaler for Windows 11 (C++20 / DirectX 12). Powered by **Envy-Diamond-2** and the **OptiScaler** runtime, it brings native DLSS Neural Rendering (DLSS-NR), Intel XeSS, and AMD FidelityFX upscaling to any window or game on AMD Radeon and NVIDIA GPUs without process injection.
 
 ---
 
 ## 📑 Table of Contents
 - [✨ Key Features](#-key-features)
+- [💎 Powered by Envy-Diamond-2](#-powered-by-envy-diamond-2)
 - [🧩 Architecture & Workflow](#-architecture--workflow)
 - [🎮 Hotkeys & In-Game Controls](#-hotkeys--in-game-controls)
 - [⚙️ Configuration (`settings.ini`)](#️-configuration-settingsini)
@@ -33,14 +35,25 @@
 
 ## ✨ Key Features
 
-* 🛡️ **Zero Process Injection:** Completely external and non-invasive. Does not modify game memory, inject remote threads, or replace game binaries. Compatible with anti-cheat systems.
-* 🚀 **Multi-Backend Neural Upscaling:** Seamlessly runs advanced neural scaling backends (Envy-Diamond, OptiScaler, DLSS-NR on AMD, XeSS, FSR 3.x) with native DX12 execution.
-* 🖱️ **Full Mouse Click-Through:** Features an intelligent dual-mode overlay:
-  * **Game Mode:** Mouse clicks, mouse look, and raw input pass directly to the game underneath (`HTTRANSPARENT`).
-  * **Menu Mode:** Instantly unlocks mouse cursor to interact with runtime GUI controls and configurations.
-* ⏱️ **Temporal Stability & Hysteresis:** Suppresses ghosting and subpixel shimmering through temporal accumulation and bounding AABB color clamping.
-* 📐 **Automatic DPI & Multi-Monitor Support:** Automatically adapts to Windows 11 display scaling (100%, 125%, 150%, 200%) to ensure perfect 1:1 pixel coverage without corner cropping.
-* ⚡ **Ultra-Low Latency Presentation:** Direct DXGI Flip-Discard swapchain (`DXGI_SWAP_EFFECT_FLIP_DISCARD`) synchronized with display VSync.
+* 🛡️ **Zero Process Injection:** Completely external and non-invasive. Captures frames directly from the desktop/GPU surface without modifying game memory, injecting remote threads, or hooking game binaries (100% anti-cheat safe).
+* 💎 **Envy-Diamond-2 Integration:** Native translation layer that unlocks DLSS Neural Rendering, Ray Reconstruction passes, and multi-backend scaling on AMD Radeon hardware.
+* ⚡ **Absolute Zero-Stutter Frame Pacing:** Bundles `EnvyDynamicPacing.asi` (The Digital Bottomless Pit) to eliminate internal timeout watchdog drops and bypass proxy penalties during heavy GPU loads.
+* 📌 **Continuous TopMost Z-Order Heartbeat:** Active DWM Z-order enforcement ensures no background games, notification popups, or external windows ever stick out above the overlay.
+* 🖱️ **Intelligent Dual-Mode Mouse Input:**
+  * **Game Mode (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd>):** Mouse clicks, mouse look, and raw input pass directly through to the game underneath (`HTTRANSPARENT`).
+  * **Menu Mode (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>M</kbd>):** Instantly unlocks the mouse cursor to interact with runtime GUI controls and menus.
+* 📐 **Adaptive DPI & Multi-Monitor Support:** Automatically handles Windows 11 display scaling (100%, 125%, 150%, 200%) and multi-monitor topologies with 1:1 pixel accuracy and zero corner cropping.
+* 🏎️ **Ultra-Low Latency Presentation:** Direct DXGI Flip-Discard swapchain (`DXGI_SWAP_EFFECT_FLIP_DISCARD`) synchronized with display VSync.
+
+---
+
+## 💎 Powered by Envy-Diamond-2
+
+FSR-NG-Scaling embeds the **Envy-Diamond-2** architecture to eliminate the notorious micro-stutters and time-budget collapses associated with running DLSS neural models on non-native hardware:
+
+1. **The Digital Bottomless Pit:** When GPU load spikes (e.g. streaming with OBS or entering complex game scenes), the internal AMD proxy watchdog normally drops its budget from 600ms down to 87ms, dropping neural frames. Envy-Diamond-2 permanently freezes the budget at 600ms, ensuring every neural frame is fully synthesized.
+2. **OptiScaler 1-Second Trap Bypass:** Automatically bypasses internal timeout penalties, ensuring uninterrupted 60+ FPS presentation.
+3. **Multi-Pass Neural Execution:** Runs the full 3-pass DLSS-NR pipeline (`dlssnr_amd_pass1/2/3.dll`) backed by 147 MB of trained generative weights (`dlssnr_on_amd_weights.bin`).
 
 ---
 
@@ -48,16 +61,16 @@
 
 ```mermaid
 graph TD
-    A[Game / Application Window] -->|Desktop Frame Capture| B(Capture Engine)
-    B -->|GPU Shared Resource / VRAM| C{Neural Upscaler Pipeline}
-    C -->|OptiScaler / Envy-Diamond / DLSS-NR| D[DirectX 12 Inference & Post-Processing]
-    D -->|Flip Discard Present| E[Borderless Topmost Overlay Window]
-    E -->|Click-Through / Transparent| F((Player Display))
+    A[Game / Window] -->|DXGI Output Duplication / Frame Capture| B(Capture Engine)
+    B -->|GPU Shared Resource / VRAM| C{Envy-Diamond-2 / OptiScaler}
+    C -->|Multi-Pass Neural Pipeline| D[DLSS-NR / XeSS / FSR In-Flight]
+    D -->|Continuous TopMost Present| E[Borderless Overlay Window]
+    E -->|Click-Through Ghost| F((Player Monitor))
     
     style A fill:#1f2937,stroke:#3b82f6,stroke-width:2px,color:#fff
     style B fill:#374151,stroke:#8b5cf6,stroke-width:2px,color:#fff
-    style C fill:#10b981,stroke:#047857,stroke-width:3px,color:#fff
-    style D fill:#374151,stroke:#ec4899,stroke-width:2px,color:#fff
+    style C fill:#8b5cf6,stroke:#6d28d9,stroke-width:3px,color:#fff
+    style D fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
     style E fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
     style F fill:#059669,stroke:#10b981,stroke-width:2px,color:#fff
 ```
@@ -66,28 +79,28 @@ graph TD
 
 ## 🎮 Hotkeys & In-Game Controls
 
-FSR-NG-Scaling runs silently in the background and can be controlled on the fly:
+FSR-NG-Scaling runs silently in the background and responds to global hotkeys:
 
 | Shortcut | Action | Description |
 | :--- | :--- | :--- |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | **Toggle Overlay** | Activates or hides the real-time scaling overlay. |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>M</kbd> | **Toggle Menu / Game Mode** | Switches mouse input between pass-through (Game) and interactive (GUI). |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>R</kbd> | **Reload Config** | Re-reads `config/settings.ini` live without restarting. |
-| <kbd>Insert</kbd> | **In-Game Menu** | Toggles the native OptiScaler / Envy-Diamond configuration menu (unlock mouse first). |
+| <kbd>Insert</kbd> | **In-Game Menu** | Toggles the native OptiScaler / Envy-Diamond-2 GUI menu (unlock mouse first). |
 | <kbd>Ctrl</kbd> + <kbd>C</kbd> | **Exit** | Gracefully terminates the application and frees all GPU resources. |
 
 ---
 
 ## ⚙️ Configuration (`config/settings.ini`)
 
-All core engine settings can be adjusted in `config/settings.ini`:
+All engine parameters can be configured in `config/settings.ini`:
 
 ```ini
 [Scaling]
 ; Scaling profile: Native, Quality, Balanced, Performance, UltraPerformance
 dlss_mode = Performance
 
-; Custom scale factor multiplier (used when not in fixed mode)
+; Custom scale factor multiplier
 scale_factor = 1.0
 
 ; Automatically adapt to Windows DPI scaling (e.g. 150%, 200%)
@@ -108,7 +121,7 @@ debug_split_screen = 0.0
 
 ### Prerequisites
 * **Operating System:** Windows 11 64-bit (x64)
-* **Compiler:** Microsoft Visual C++ (MSVC) with C++20 support (Visual Studio 2022 v17.x or later)
+* **Compiler:** Microsoft Visual C++ (MSVC) with C++20 support (Visual Studio 2022 v17.x / VS 2026)
 * **Windows SDK:** 10.0.19041.0 or higher (SDK 10.0.28000+ recommended)
 * **Build System:** CMake 3.20+
 
@@ -122,7 +135,7 @@ debug_split_screen = 0.0
    ```cmd
    build.bat
    ```
-   *Or manually using CMake:*
+   *Or manually via CMake:*
    ```cmd
    cmake -B build -A x64
    cmake --build build --config Release
@@ -133,10 +146,10 @@ debug_split_screen = 0.0
 ## 📦 Pre-built Release Installation
 
 1. Download `FSR-NG-Scaling-v1.0.0-win64.zip` from the [Releases](https://github.com/mnector/FSR-NG-Scaling/releases) section.
-2. Extract the archive to any folder of your choice.
+2. Extract the archive to any directory.
 3. Launch `FSR-NG-Scaling.exe`.
-4. Open your game in Windowed or Borderless Windowed mode.
-5. Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> to activate lossless neural scaling!
+4. Open your game in **Windowed** or **Borderless Windowed** mode.
+5. Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> to activate real-time neural scaling!
 
 ---
 
@@ -144,10 +157,10 @@ debug_split_screen = 0.0
 
 ```text
 FSR-NG-Scaling/
-├── 📄 CMakeLists.txt           # CMake build script (MSVC C++20 / DX12)
-├── 📖 README.md                # Documentation and usage guide
+├── 📄 CMakeLists.txt           # CMake build configuration
+├── 📖 README.md                # Project documentation
 ├── 🛠️ build.bat                # One-click Release build script
-├── 📦 backend/                 # Engine bridges, upscaler backends and weights
+├── 📦 backend/                 # Envy-Diamond-2 engine libraries, passes, and weights
 ├── ⚙️ config/                  # Runtime settings (settings.ini)
 ├── 🎨 shaders/                 # HLSL Compute Shaders
 └── 💻 src/
@@ -161,7 +174,7 @@ FSR-NG-Scaling/
 
 ## 💖 Support the Project
 
-If you enjoy FSR-NG-Scaling and would like to support ongoing development and research:
+If you enjoy FSR-NG-Scaling and would like to support ongoing development:
 
 <div align="center">
   <a href="https://paypal.me/mnecstream" target="_blank">
@@ -173,5 +186,5 @@ If you enjoy FSR-NG-Scaling and would like to support ongoing development and re
 
 ## 📄 License & Disclaimer
 
-FSR-NG-Scaling is released under the **MIT License**.  
-All trademarks, product names, and company logos are the property of their respective owners. This software is an independent research project and is not affiliated with, endorsed by, or sponsored by NVIDIA Corporation or Advanced Micro Devices, Inc.
+FSR-NG-Scaling is licensed under the **MIT License**.  
+All trademarks, product names, and company logos are the property of their respective owners. This software is an independent research project.

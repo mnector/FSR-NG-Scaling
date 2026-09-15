@@ -128,9 +128,7 @@ bool NeuralUpscaler::Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT fo
         ngxFeature_ = nullptr;
     }
 
-    
     CreateOutputResource(outW, outH, format);
-    
     
     if (!CreateDummyTextures(scaledW_, scaledH_)) {
         error_ = "Failed to create dummy textures for DLSS.";
@@ -209,10 +207,8 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
     params.resetHistory = 0.0f;
 
     // Lock exposure to 1.0 to completely eliminate auto-exposure runaway and black screen darkening
-    ngxParameters_->Set("DLSS.Exposure.Scale", 1.0f);
-    ngxParameters_->Set("DLSS.Pre.Exposure", 1.0f);
-    ngxParameters_->Set("DLSS.ExposureValue", 1.0f);
     ngxParameters_->Set(NVSDK_NGX_Parameter_DLSS_Exposure_Scale, 1.0f);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_DLSS_Pre_Exposure, 1.0f);
 
     NVSDK_NGX_Result res = pfnEvaluateFeature(cmd, ngxFeature_, ngxParameters_, nullptr);
     if (NVSDK_NGX_FAILED(res)) {

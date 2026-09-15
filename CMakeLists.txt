@@ -67,7 +67,6 @@ target_link_libraries(FSR-NG-Scaling PRIVATE
 add_custom_command(TARGET FSR-NG-Scaling POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:FSR-NG-Scaling>/config
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/config/settings.ini $<TARGET_FILE_DIR:FSR-NG-Scaling>/config/
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/OptiScaler.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/dxgi.dll
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/OptiScaler.dll $<TARGET_FILE_DIR:FSR-NG-Scaling>/nvngx.dll
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/OptiScaler.ini $<TARGET_FILE_DIR:FSR-NG-Scaling>/
     COMMAND ${CMAKE_COMMAND} -E copy_if_different ${CMAKE_CURRENT_SOURCE_DIR}/backend/dlssnr_on_amd_weights.bin $<TARGET_FILE_DIR:FSR-NG-Scaling>/

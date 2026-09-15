@@ -1,6 +1,8 @@
 #pragma once
 #include <windows.h>
+#include <d3d11.h>
 #include <d3d12.h>
+#include <dxgi1_2.h>
 #include <wrl/client.h>
 #include <string>
 
@@ -26,7 +28,7 @@ public:
     void Stop();
 
     ID3D12Resource* AcquireLatestFrame(bool* newFrame = nullptr);
-    void* GetD3D12KeyedMutex() { return nullptr; }
+    IDXGIKeyedMutex* GetD3D12KeyedMutex() { return d3d12KeyedMutex_.Get(); }
 
     uint32_t width() const { return width_; }
     uint32_t height() const { return height_; }
@@ -35,27 +37,33 @@ public:
     WindowClientInfo GetForegroundClientArea(HWND excludeHwnd);
 
 private:
+    bool SetupD3D11AndDuplication();
+    bool CreateSharedResources();
+    bool SetupComputeDownsampler();
+
     Microsoft::WRL::ComPtr<ID3D12Device> d3d12Device_;
     Microsoft::WRL::ComPtr<ID3D12CommandQueue> commandQueue_;
-    Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAlloc_;
-    Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList_;
-    Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
-    UINT64 fenceValue_ = 0;
-    HANDLE fenceEvent_ = nullptr;
+    Microsoft::WRL::ComPtr<ID3D12Resource> d3d12SharedResource_;
+    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> d3d12KeyedMutex_;
 
-    Microsoft::WRL::ComPtr<ID3D12Resource> texture_;
-    Microsoft::WRL::ComPtr<ID3D12Resource> uploadBuffer_;
-    
-    HDC screenDC_ = nullptr;
-    HDC memDC_ = nullptr;
-    HBITMAP bitmap_ = nullptr;
-    void* bitmapData_ = nullptr;
+    Microsoft::WRL::ComPtr<ID3D11Device> d3d11Device_;
+    Microsoft::WRL::ComPtr<ID3D11DeviceContext> d3d11Context_;
+    Microsoft::WRL::ComPtr<IDXGIOutputDuplication> duplication_;
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> d3d11SharedTexture_;
+    Microsoft::WRL::ComPtr<IDXGIKeyedMutex> d3d11KeyedMutex_;
+
+    // GPU Downscaler resources if desktop resolution != target width/height
+    Microsoft::WRL::ComPtr<ID3D11ComputeShader> downscaleCS_;
+    Microsoft::WRL::ComPtr<ID3D11SamplerState> linearSampler_;
+    Microsoft::WRL::ComPtr<ID3D11UnorderedAccessView> sharedTexUAV_;
 
     uint32_t width_ = 1920;
     uint32_t height_ = 1080;
+    uint32_t desktopWidth_ = 0;
+    uint32_t desktopHeight_ = 0;
     std::string error_;
-
-    void WaitForGPU();
+    bool active_ = false;
+    uint64_t frameCount_ = 0;
 };
 
-}
+} // namespace fsrng

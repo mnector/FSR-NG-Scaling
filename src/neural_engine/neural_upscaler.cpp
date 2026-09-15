@@ -43,14 +43,17 @@ bool NeuralUpscaler::Initialize() {
         return false;
     }
 
-    // 2. Load NGX/OptiScaler
-    hNvngx_ = LoadLibraryA("nvngx.dll");
-    if (!hNvngx_) {
-        hNvngx_ = LoadLibraryA("dxgi.dll");
+    // 2. Load NGX/OptiScaler: check dxgi.dll first (so SwapChain hooks & Insert menu work)
+    hNvngx_ = GetModuleHandleA("dxgi.dll");
+    if (!hNvngx_ || !GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_Init_with_ProjectID")) {
+        hNvngx_ = LoadLibraryA("nvngx.dll");
         if (!hNvngx_) {
-            error_ = "Failed to load nvngx.dll or dxgi.dll proxy for OptiScaler.";
-            return false;
+            hNvngx_ = LoadLibraryA("dxgi.dll");
         }
+    }
+    if (!hNvngx_) {
+        error_ = "Failed to load nvngx.dll or dxgi.dll proxy for OptiScaler.";
+        return false;
     }
 
     pfnInit = (PFN_NVSDK_NGX_D3D12_Init_with_ProjectID)GetProcAddress(hNvngx_, "NVSDK_NGX_D3D12_Init_with_ProjectID");
@@ -96,10 +99,11 @@ void NeuralUpscaler::ShutdownNGX() {
     if (pfnShutdown) {
         pfnShutdown();
     }
-    if (hNvngx_) {
+    HMODULE hDxgi = GetModuleHandleA("dxgi.dll");
+    if (hNvngx_ && hNvngx_ != hDxgi) {
         FreeLibrary(hNvngx_);
-        hNvngx_ = nullptr;
     }
+    hNvngx_ = nullptr;
     ngxInitialized_ = false;
 }
 

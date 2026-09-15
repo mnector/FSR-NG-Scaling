@@ -208,6 +208,24 @@ int main(int argc, char* argv[]) {
     while (g_running.load()) {
         if (!overlay.ProcessMessages()) break;
 
+        // Auto-detect INSERT key to immediately unlock mouse for OptiScaler ImGui menu
+        static bool lastInsertState = false;
+        bool insertPressed = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
+        if (insertPressed && !lastInsertState) {
+            menuModeActive = !menuModeActive.load();
+            overlay.SetClickThrough(!menuModeActive.load());
+            if (menuModeActive.load()) {
+                if (!scalingActive.load()) {
+                    scalingActive = true;
+                    overlay.Show(true);
+                }
+                std::cout << "\n[Hotkey] INSERT: OptiScaler Menu opened -> Mouse UNLOCKED for GUI." << std::endl;
+            } else {
+                std::cout << "\n[Hotkey] INSERT: OptiScaler Menu closed -> Mouse click-through ENABLED." << std::endl;
+            }
+        }
+        lastInsertState = insertPressed;
+
         if (!scalingActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;
@@ -215,10 +233,13 @@ int main(int argc, char* argv[]) {
 
         bool newFrame = false;
         ID3D12Resource* inputFrame = capture.AcquireLatestFrame(&newFrame);
-        if (!inputFrame || !newFrame) {
+        if (!inputFrame) {
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
             continue;
         }
+
+        IDXGIKeyedMutex* keyedMutex = capture.GetD3D12KeyedMutex();
+        if (keyedMutex) keyedMutex->AcquireSync(0, 50);
 
         directAlloc->Reset();
         directCmd->Reset(directAlloc.Get(), nullptr);
@@ -228,6 +249,8 @@ int main(int argc, char* argv[]) {
         directCmd->Close();
         ID3D12CommandList* lists[] = { directCmd.Get() };
         directQueue->ExecuteCommandLists(1, lists);
+
+        if (keyedMutex) keyedMutex->ReleaseSync(0);
 
         if (upscaler.output()) {
             presenter.Present(upscaler.output(), nullptr, true);

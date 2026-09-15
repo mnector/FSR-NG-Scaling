@@ -1,27 +1,27 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/mnector/FSR-NG-Scaling/main/test_upscaled.bmp" alt="FSR-NG-Scaling Banner" width="400" onerror="this.style.display='none'">
-  <h1>🌟 FSR-NG-Scaling 🌟<br><sub>Powered by Envy-Diamond-2 💎 & OptiScaler</sub></h1>
+  <h1>🌟 FSR-NG-Scaling 🌟<br><sub>Powered by Envy-Diamond-2 💎 (ED2) & OptiScaler</sub></h1>
   
   <p><strong>Next-Gen Lossless Real-Time Neural Scaler & Desktop Overlay for Windows 11</strong></p>
   
   <a href="https://paypal.me/mnecstream"><img src="https://img.shields.io/badge/Donate-PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate"></a>
-  <img src="https://img.shields.io/badge/Engine-Envy--Diamond--2%20💎-blueviolet?style=for-the-badge" alt="Envy-Diamond-2">
+  <a href="https://github.com/mnector/ED2"><img src="https://img.shields.io/badge/Engine-Envy--Diamond--2%20💎-blueviolet?style=for-the-badge" alt="Envy-Diamond-2"></a>
   <img src="https://img.shields.io/badge/Platform-Windows%2011-blue?style=for-the-badge&logo=windows" alt="Windows 11">
   <img src="https://img.shields.io/badge/API-DirectX%2012-red?style=for-the-badge" alt="DirectX 12">
   <img src="https://img.shields.io/badge/Architecture-C%2B%2B20%20x64-brightgreen?style=for-the-badge" alt="C++20 x64">
-  <img src="https://img.shields.io/badge/Release-v1.0.0-orange?style=for-the-badge" alt="Release v1.0.0">
+  <img src="https://img.shields.io/badge/Release-v1.0.1-orange?style=for-the-badge" alt="Release v1.0.1">
 </div>
 
 <br/>
 
 > [!NOTE]  
-> **FSR-NG-Scaling** is a standalone, ultra-low latency real-time neural upscaler for Windows 11 (C++20 / DirectX 12). Powered by **Envy-Diamond-2** and the **OptiScaler** runtime, it brings native DLSS Neural Rendering (DLSS-NR), Intel XeSS, and AMD FidelityFX upscaling to any window or game on AMD Radeon and NVIDIA GPUs without process injection.
+> **FSR-NG-Scaling** is a standalone, ultra-low latency real-time neural upscaler for Windows 11 (C++20 / DirectX 12). Powered by the latest **Envy-Diamond-2 (ED2)** translation engine and **OptiScaler**, it brings native DLSS Neural Rendering (DLSS-NR), Intel XeSS, and AMD FidelityFX upscaling to any window or game on AMD Radeon and NVIDIA GPUs without process injection.
 
 ---
 
 ## 📑 Table of Contents
 - [✨ Key Features](#-key-features)
-- [💎 Powered by Envy-Diamond-2](#-powered-by-envy-diamond-2)
+- [💎 Powered by Envy-Diamond-2 (ED2)](#-powered-by-envy-diamond-2-ed2)
 - [🧩 Architecture & Workflow](#-architecture--workflow)
 - [🎮 Hotkeys & In-Game Controls](#-hotkeys--in-game-controls)
 - [⚙️ Configuration (`settings.ini`)](#️-configuration-settingsini)
@@ -36,8 +36,8 @@
 ## ✨ Key Features
 
 * 🛡️ **Zero Process Injection:** Completely external and non-invasive. Captures frames directly from the desktop/GPU surface without modifying game memory, injecting remote threads, or hooking game binaries (100% anti-cheat safe).
-* 💎 **Envy-Diamond-2 Integration:** Native translation layer that unlocks DLSS Neural Rendering, Ray Reconstruction passes, and multi-backend scaling on AMD Radeon hardware.
-* ⚡ **Absolute Zero-Stutter Frame Pacing:** Bundles `EnvyDynamicPacing.asi` (The Digital Bottomless Pit) to eliminate internal timeout watchdog drops and bypass proxy penalties during heavy GPU loads.
+* 💎 **Envy-Diamond-2 (ED2) Engine Integration:** Unlocks DLSS Neural Rendering (DLSS-NR), Ray Reconstruction passes, and multi-backend scaling on AMD Radeon hardware.
+* ⚡ **Absolute Zero-Stutter Frame Pacing:** Bundles `EnvyDynamicPacing.asi` (The Digital Bottomless Pit v1.0.1) to eliminate internal watchdog timeout drops and bypass proxy penalties during heavy GPU loads.
 * 📌 **Continuous TopMost Z-Order Heartbeat:** Active DWM Z-order enforcement ensures no background games, notification popups, or external windows ever stick out above the overlay.
 * 🖱️ **Intelligent Dual-Mode Mouse Input:**
   * **Game Mode (<kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd>):** Mouse clicks, mouse look, and raw input pass directly through to the game underneath (`HTTRANSPARENT`).
@@ -47,12 +47,17 @@
 
 ---
 
-## 💎 Powered by Envy-Diamond-2
+## 💎 Powered by Envy-Diamond-2 (ED2)
 
-FSR-NG-Scaling embeds the **Envy-Diamond-2** architecture to eliminate the notorious micro-stutters and time-budget collapses associated with running DLSS neural models on non-native hardware:
+FSR-NG-Scaling embeds the **[Envy-Diamond-2 (ED2)](https://github.com/mnector/ED2)** architecture to eliminate micro-stutters and time-budget collapses associated with running heavy neural models on AMD hardware:
 
-1. **The Digital Bottomless Pit:** When GPU load spikes (e.g. streaming with OBS or entering complex game scenes), the internal AMD proxy watchdog normally drops its budget from 600ms down to 87ms, dropping neural frames. Envy-Diamond-2 permanently freezes the budget at 600ms, ensuring every neural frame is fully synthesized.
-2. **OptiScaler 1-Second Trap Bypass:** Automatically bypasses internal timeout penalties, ensuring uninterrupted 60+ FPS presentation.
+1. **The Digital Bottomless Pit (`EnvyDynamicPacing.asi` v1.0.1):**
+   * **Host Watchdog Budget Freezer:** Freezes internal AMD proxy time budgets at 600ms, preventing watchdog timeout drops from 600ms down to 87ms under heavy loads (e.g. streaming with OBS Studio or high-density scenes).
+   * **Unlocked 50M Iteration Cap:** Modifies the internal spin iteration cap to 50,000,000 and NOPs out dynamic cap recalculations.
+   * **OptiScaler Penalty Bypass:** Dynamically patches `dxgi.dll` in memory to bypass 16ms error counters and 1-second recovery penalties (Offsets `0x14587`, `0x14750`, `0x19442`).
+2. **GPU-Aware Detection & TDR Hardening:**
+   * Includes `tools/Setup.TDRFix.ps1` to configure Windows TDR delay to 10 seconds, preventing driver timeouts during intense neural compute passes.
+   * Validated against AMD RDNA 2, RDNA 3, and RDNA 4 (Radeon AI PRO R9700 / RX 7000 / RX 9000 series).
 3. **Multi-Pass Neural Execution:** Runs the full 3-pass DLSS-NR pipeline (`dlssnr_amd_pass1/2/3.dll`) backed by 147 MB of trained generative weights (`dlssnr_on_amd_weights.bin`).
 
 ---
@@ -63,16 +68,18 @@ FSR-NG-Scaling embeds the **Envy-Diamond-2** architecture to eliminate the notor
 graph TD
     A[Game / Window] -->|DXGI Output Duplication / Frame Capture| B(Capture Engine)
     B -->|GPU Shared Resource / VRAM| C{Envy-Diamond-2 / OptiScaler}
-    C -->|Multi-Pass Neural Pipeline| D[DLSS-NR / XeSS / FSR In-Flight]
-    D -->|Continuous TopMost Present| E[Borderless Overlay Window]
-    E -->|Click-Through Ghost| F((Player Monitor))
+    C -->|EnvyDynamicPacing.asi| D[Zero-Stutter Memory Patched Pipeline]
+    D -->|Multi-Pass Neural Passes| E[DLSS-NR / XeSS / FSR In-Flight]
+    E -->|Continuous TopMost Present| F[Borderless Overlay Window]
+    F -->|Click-Through Ghost| G((Player Monitor))
     
     style A fill:#1f2937,stroke:#3b82f6,stroke-width:2px,color:#fff
     style B fill:#374151,stroke:#8b5cf6,stroke-width:2px,color:#fff
     style C fill:#8b5cf6,stroke:#6d28d9,stroke-width:3px,color:#fff
-    style D fill:#10b981,stroke:#047857,stroke-width:2px,color:#fff
-    style E fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
-    style F fill:#059669,stroke:#10b981,stroke-width:2px,color:#fff
+    style D fill:#10b981,stroke:#047857,stroke-width:3px,color:#fff
+    style E fill:#ec4899,stroke:#be185d,stroke-width:2px,color:#fff
+    style F fill:#f59e0b,stroke:#b45309,stroke-width:2px,color:#fff
+    style G fill:#059669,stroke:#10b981,stroke-width:2px,color:#fff
 ```
 
 ---
@@ -145,11 +152,12 @@ debug_split_screen = 0.0
 
 ## 📦 Pre-built Release Installation
 
-1. Download `FSR-NG-Scaling-v1.0.0-win64.zip` from the [Releases](https://github.com/mnector/FSR-NG-Scaling/releases) section.
+1. Download `FSR-NG-Scaling-v1.0.1-win64.zip` from the [Releases](https://github.com/mnector/FSR-NG-Scaling/releases) section.
 2. Extract the archive to any directory.
-3. Launch `FSR-NG-Scaling.exe`.
-4. Open your game in **Windowed** or **Borderless Windowed** mode.
-5. Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> to activate real-time neural scaling!
+3. *(Optional, recommended for heavy scenes):* Right-click `tools/Setup.TDRFix.ps1` and run with PowerShell as Administrator.
+4. Launch `FSR-NG-Scaling.exe`.
+5. Open your game in **Windowed** or **Borderless Windowed** mode.
+6. Press <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> to activate real-time neural scaling!
 
 ---
 
@@ -158,11 +166,12 @@ debug_split_screen = 0.0
 ```text
 FSR-NG-Scaling/
 ├── 📄 CMakeLists.txt           # CMake build configuration
-├── 📖 README.md                # Project documentation
+├── 📖 README.md                # Documentation and usage guide
 ├── 🛠️ build.bat                # One-click Release build script
 ├── 📦 backend/                 # Envy-Diamond-2 engine libraries, passes, and weights
 ├── ⚙️ config/                  # Runtime settings (settings.ini)
 ├── 🎨 shaders/                 # HLSL Compute Shaders
+├── 🔧 tools/                   # TDR registry fix & environment validator
 └── 💻 src/
     ├── capture/                # Screen capture & frame pool
     ├── display/                # Borderless overlay & Swapchain Presenter

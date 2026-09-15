@@ -208,6 +208,12 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
     ngxParameters_->Set(NVSDK_NGX_Parameter_Reset, params.resetHistory > 0.0f ? 1 : 0);
     params.resetHistory = 0.0f;
 
+    // Lock exposure to 1.0 to completely eliminate auto-exposure runaway and black screen darkening
+    ngxParameters_->Set("DLSS.Exposure.Scale", 1.0f);
+    ngxParameters_->Set("DLSS.Pre.Exposure", 1.0f);
+    ngxParameters_->Set("DLSS.ExposureValue", 1.0f);
+    ngxParameters_->Set(NVSDK_NGX_Parameter_DLSS_Exposure_Scale, 1.0f);
+
     NVSDK_NGX_Result res = pfnEvaluateFeature(cmd, ngxFeature_, ngxParameters_, nullptr);
     if (NVSDK_NGX_FAILED(res)) {
         // Output failure but don't crash
@@ -267,15 +273,84 @@ bool NeuralUpscaler::CreateDummyTextures(int w, int h) {
     device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&alloc));
     device_->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, alloc.Get(), nullptr, IID_PPV_ARGS(&cmd));
 
-    TransitionResource(cmd.Get(), dummyMVs_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    TransitionResource(cmd.Get(), dummyDepth_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    TransitionResource(cmd.Get(), dummyAlbedo_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    TransitionResource(cmd.Get(), dummyNormal_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
-    
+    // Fill each dummy texture with neutral valid data via upload buffer
+    std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> uploadBuffers;
+    auto clearTextureWithData = [&](ID3D12Resource* tex, DXGI_FORMAT fmt, auto fillFunc) {
+        D3D12_RESOURCE_DESC td = tex->GetDesc();
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+        UINT numRows;
+        UINT64 rowSize, totalBytes;
+        device_->GetCopyableFootprints(&td, 0, 1, 0, &footprint, &numRows, &rowSize, &totalBytes);
+
+        D3D12_HEAP_PROPERTIES upHeap = {};
+        upHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+        D3D12_RESOURCE_DESC bufDesc = {};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = totalBytes;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> upBuf;
+        if (SUCCEEDED(device_->CreateCommittedResource(&upHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upBuf)))) {
+            void* pData = nullptr;
+            if (SUCCEEDED(upBuf->Map(0, nullptr, &pData))) {
+                fillFunc(pData, footprint.Footprint.RowPitch, numRows);
+                upBuf->Unmap(0, nullptr);
+
+                D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
+                dstLoc.pResource = tex;
+                dstLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                dstLoc.SubresourceIndex = 0;
+
+                D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+                srcLoc.pResource = upBuf.Get();
+                srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                srcLoc.PlacedFootprint = footprint;
+
+                TransitionResource(cmd.Get(), tex, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+                cmd->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);
+                TransitionResource(cmd.Get(), tex, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                uploadBuffers.push_back(upBuf);
+            }
+        }
+    };
+
+    // MVs to 0.0f
+    clearTextureWithData(dummyMVs_.Get(), DXGI_FORMAT_R16G16_FLOAT, [](void* p, UINT pitch, UINT rows) {
+        memset(p, 0, pitch * rows);
+    });
+
+    // Depth to 1.0f (far plane)
+    clearTextureWithData(dummyDepth_.Get(), DXGI_FORMAT_R32_FLOAT, [w](void* p, UINT pitch, UINT rows) {
+        for (UINT r = 0; r < rows; ++r) {
+            float* rowPtr = reinterpret_cast<float*>(static_cast<BYTE*>(p) + r * pitch);
+            for (int x = 0; x < w; ++x) rowPtr[x] = 1.0f;
+        }
+    });
+
+    // Albedo to neutral 0.5f grey (128)
+    clearTextureWithData(dummyAlbedo_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, [](void* p, UINT pitch, UINT rows) {
+        memset(p, 128, pitch * rows);
+    });
+
+    // Normal to flat +Z (128, 128, 255, 0)
+    clearTextureWithData(dummyNormal_.Get(), DXGI_FORMAT_R8G8B8A8_UNORM, [w](void* p, UINT pitch, UINT rows) {
+        for (UINT r = 0; r < rows; ++r) {
+            BYTE* rowPtr = static_cast<BYTE*>(p) + r * pitch;
+            for (int x = 0; x < w; ++x) {
+                rowPtr[x * 4 + 0] = 128;
+                rowPtr[x * 4 + 1] = 128;
+                rowPtr[x * 4 + 2] = 255;
+                rowPtr[x * 4 + 3] = 0;
+            }
+        }
+    });
     
     cmd->Close();
     ID3D12CommandList* lists[] = { cmd.Get() };
-    
     directQueue_->ExecuteCommandLists(1, lists);
     
     Microsoft::WRL::ComPtr<ID3D12Fence> fence;
@@ -283,9 +358,7 @@ bool NeuralUpscaler::CreateDummyTextures(int w, int h) {
     directQueue_->Signal(fence.Get(), 1);
     HANDLE event = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     fence->SetEventOnCompletion(1, event);
-    
     WaitForSingleObject(event, INFINITE);
-    
     CloseHandle(event);
 
     return true;

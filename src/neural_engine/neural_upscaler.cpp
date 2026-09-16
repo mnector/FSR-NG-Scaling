@@ -225,9 +225,12 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
                 const float* src = depthMap;
                 for (UINT r = 0; r < numRows && r < td.Height; ++r) {
                     float* dst = reinterpret_cast<float*>(static_cast<BYTE*>(pData) + r * footprint.Footprint.RowPitch);
-                    for (UINT c = 0; c < td.Width && c < 518; ++c) {
-                        // Clamp depth to [0.1, 1.0] for NGX
-                        float d = src[r * 518 + c];
+                    uint32_t srcY = (uint32_t)(r * 518 / td.Height);
+                    if (srcY >= 518) srcY = 517;
+                    for (UINT c = 0; c < td.Width; ++c) {
+                        uint32_t srcX = (uint32_t)(c * 518 / td.Width);
+                        if (srcX >= 518) srcX = 517;
+                        float d = src[srcY * 518 + srcX];
                         dst[c] = fmaxf(0.1f, fminf(1.0f, d));
                     }
                 }

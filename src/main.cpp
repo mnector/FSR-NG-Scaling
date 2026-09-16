@@ -253,22 +253,20 @@ int main(int argc, char* argv[]) {
             std::vector<float> depthMap(518 * 518);
             
             // TODO: Replace with actual frame data mapping
-            // Placeholder for demo
+            // Placeholder for demo - linear gradient
             for (uint32_t y = 0; y < 518; ++y) {
                 for (uint32_t x = 0; x < 518; ++x) {
                     depthMap[y * 518 + x] = static_cast<float>(x) / 518.0f;
                 }
             }
             
-            static int frameCounter = 0;
-            if (++frameCounter % 30 == 0) {
-                std::cout << "[Depth] Generated depth map (518x518) - ONNX via Python backend" << std::endl;
-            }
+            std::cout << "[Depth] Generated depth map (518x518) - ONNX via Python backend" << std::endl;
             
-            // TODO: Pass depthMap to upscaler.Process
+            // Pass depthMap to upscaler
+            upscaler.Process(directCmd.Get(), inputFrame, 0, 0, depthMap.data());
+        } else {
+            upscaler.Process(directCmd.Get(), inputFrame, 0, 0);
         }
-
-        upscaler.Process(directCmd.Get(), inputFrame, 0, 0);
 
         directCmd->Close();
         ID3D12CommandList* lists[] = { directCmd.Get() };

@@ -19,7 +19,7 @@ public:
 
     bool Initialize();
     bool Resize(int inW, int inH, int outW, int outH, DXGI_FORMAT format = DXGI_FORMAT_B8G8R8A8_UNORM, float desktopScale = 1.0f);
-    void Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inputResource, int cropX = 0, int cropY = 0);
+    void Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inputResource, int cropX = 0, int cropY = 0, const float* depthMap = nullptr);
     void ResetHistory() { params.resetHistory = 1.0f; }
 
     ID3D12Resource* output() const { return outputResource_.Get(); }

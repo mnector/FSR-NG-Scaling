@@ -36,6 +36,7 @@
 ## ✨ Key Features
 
 * 🛡️ **Zero Process Injection:** Completely external and non-invasive. Captures frames directly from the desktop/GPU surface without modifying game memory, injecting remote threads, or hooking game binaries (100% anti-cheat safe).
+* 🧠 **Real-Time AI Depth Estimation:** Integrates a parallel ONNX Runtime asynchronous pipeline running Depth Anything V2 to dynamically hallucinate missing depth maps for native FSR2/DLSS upscaling logic without game integration.
 * 💎 **Envy-Diamond-2 (ED2) Engine Integration:** Unlocks DLSS Neural Rendering (DLSS-NR), Ray Reconstruction passes, and multi-backend scaling on AMD Radeon hardware.
 * ⚡ **Absolute Zero-Stutter Frame Pacing:** Bundles `EnvyDynamicPacing.asi` (The Digital Bottomless Pit v1.0.1) to eliminate internal watchdog timeout drops and bypass proxy penalties during heavy GPU loads.
 * 📌 **Continuous TopMost Z-Order Heartbeat:** Active DWM Z-order enforcement ensures no background games, notification popups, or external windows ever stick out above the overlay.
@@ -91,8 +92,9 @@ FSR-NG-Scaling runs silently in the background and responds to global hotkeys:
 | Shortcut | Action | Description |
 | :--- | :--- | :--- |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>S</kbd> | **Toggle Overlay** | Activates or hides the real-time scaling overlay. |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>D</kbd> | **Toggle Depth Map** | Toggles the real-time AI depth map visualization overlay. |
 | <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>M</kbd> | **Toggle Menu / Game Mode** | Switches mouse input between pass-through (Game) and interactive (GUI). |
-| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>R</kbd> | **Reload Config** | Re-reads `config/settings.ini` live without restarting. |
+| <kbd>Ctrl</kbd> + <kbd>Alt</kbd> + <kbd>R</kbd> | **Reload Config** | Re-reads `OptiScaler.ini` live without restarting. |
 | <kbd>Insert</kbd> | **In-Game Menu** | Toggles the native OptiScaler / Envy-Diamond-2 GUI menu (unlock mouse first). |
 | <kbd>Ctrl</kbd> + <kbd>C</kbd> | **Exit** | Gracefully terminates the application and frees all GPU resources. |
 
@@ -152,7 +154,7 @@ debug_split_screen = 0.0
 
 ## 📦 Pre-built Release Installation
 
-1. Download `FSR-NG-Scaling-v1.0.1-win64.zip` from the [Releases](https://github.com/mnector/FSR-NG-Scaling/releases) section.
+1. Download `FSR-NG-Scaling-v1.0.3-win64.zip` from the [Releases](https://github.com/mnector/FSR-NG-Scaling/releases) section.
 2. Extract the archive to any directory.
 3. *(Optional, recommended for heavy scenes):* Right-click `tools/Setup.TDRFix.ps1` and run with PowerShell as Administrator.
 4. Launch `FSR-NG-Scaling.exe`.

@@ -24,6 +24,7 @@ LRESULT CALLBACK OverlayWindow::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPAR
 
     switch (msg) {
         case WM_CLOSE:
+            std::cerr << "[OverlayWindow] WM_CLOSE received" << std::endl;
             if (self && self->onClose_) {
                 self->onClose_();
             }

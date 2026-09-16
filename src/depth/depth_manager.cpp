@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <cstdlib>
+#include <iostream>
 #include <sys/stat.h>
 
 namespace fsrng {
@@ -56,14 +57,18 @@ static bool fileExists(const std::wstring& path) {
 bool DepthManager::Initialize(const std::wstring& modelPath) {
     modelPath_ = modelPath;
 
+    std::wcerr << L"[Depth] Checking file: " << modelPath << std::endl;
+
     // Check if model file and external data exist
     if (!fileExists(modelPath)) {
+        std::wcerr << L"[Depth] File NOT found: " << modelPath << std::endl;
         return false;
     }
     
     // Check for external data file
     std::wstring dataPath = modelPath + L"_data";
     hasExternalData_ = fileExists(dataPath);
+    std::wcerr << L"[Depth] External data: " << (hasExternalData_ ? L"yes" : L"no") << std::endl;
 
     initialized_ = true;
     return true;

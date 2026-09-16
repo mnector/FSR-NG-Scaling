@@ -29,11 +29,11 @@ public:
     int height() const { return height_; }
     DXGI_FORMAT format() const { return format_; }
     const std::string& error() const { return error_; }
+    void WaitForGpu();
 
 private:
     bool CreateRtvHeap();
     bool CreateBackbufferResources();
-    void WaitForGpu();
 
     HWND hwnd_ = nullptr;
     ID3D12Device* device_ = nullptr;

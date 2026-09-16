@@ -204,21 +204,23 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
         UINT64 rowSize, totalBytes;
         device_->GetCopyableFootprints(&td, 0, 1, 0, &footprint, &numRows, &rowSize, &totalBytes);
 
-        D3D12_HEAP_PROPERTIES uploadHeap = {};
-        uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
-        D3D12_RESOURCE_DESC bufDesc = {};
-        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufDesc.Width = totalBytes;
-        bufDesc.Height = 1;
-        bufDesc.DepthOrArraySize = 1;
-        bufDesc.MipLevels = 1;
-        bufDesc.SampleDesc.Count = 1;
-        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (!depthUploadBuffer_) {
+            D3D12_HEAP_PROPERTIES uploadHeap = {};
+            uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+            D3D12_RESOURCE_DESC bufDesc = {};
+            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            bufDesc.Width = totalBytes;
+            bufDesc.Height = 1;
+            bufDesc.DepthOrArraySize = 1;
+            bufDesc.MipLevels = 1;
+            bufDesc.SampleDesc.Count = 1;
+            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            device_->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&depthUploadBuffer_));
+        }
 
-        Microsoft::WRL::ComPtr<ID3D12Resource> upBuf;
-        if (SUCCEEDED(device_->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upBuf)))) {
+        if (depthUploadBuffer_) {
             void* pData = nullptr;
-            if (SUCCEEDED(upBuf->Map(0, nullptr, &pData))) {
+            if (SUCCEEDED(depthUploadBuffer_->Map(0, nullptr, &pData))) {
                 // Copy depth data (518x518) to texture row by row
                 const float* src = depthMap;
                 for (UINT r = 0; r < numRows && r < td.Height; ++r) {
@@ -229,7 +231,7 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
                         dst[c] = fmaxf(0.1f, fminf(1.0f, d));
                     }
                 }
-                upBuf->Unmap(0, nullptr);
+                depthUploadBuffer_->Unmap(0, nullptr);
 
                 D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
                 dstLoc.pResource = dummyDepth_.Get();
@@ -237,13 +239,13 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
                 dstLoc.SubresourceIndex = 0;
 
                 D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
-                srcLoc.pResource = upBuf.Get();
+                srcLoc.pResource = depthUploadBuffer_.Get();
                 srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
                 srcLoc.PlacedFootprint = footprint;
 
                 TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
                 cmd->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);
-                TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
         }
     } else {
@@ -254,26 +256,28 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
         UINT64 rowSize, totalBytes;
         device_->GetCopyableFootprints(&td, 0, 1, 0, &footprint, &numRows, &rowSize, &totalBytes);
 
-        D3D12_HEAP_PROPERTIES uploadHeap = {};
-        uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
-        D3D12_RESOURCE_DESC bufDesc = {};
-        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-        bufDesc.Width = totalBytes;
-        bufDesc.Height = 1;
-        bufDesc.DepthOrArraySize = 1;
-        bufDesc.MipLevels = 1;
-        bufDesc.SampleDesc.Count = 1;
-        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        if (!depthUploadBuffer_) {
+            D3D12_HEAP_PROPERTIES uploadHeap = {};
+            uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+            D3D12_RESOURCE_DESC bufDesc = {};
+            bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+            bufDesc.Width = totalBytes;
+            bufDesc.Height = 1;
+            bufDesc.DepthOrArraySize = 1;
+            bufDesc.MipLevels = 1;
+            bufDesc.SampleDesc.Count = 1;
+            bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+            device_->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&depthUploadBuffer_));
+        }
 
-        Microsoft::WRL::ComPtr<ID3D12Resource> upBuf;
-        if (SUCCEEDED(device_->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upBuf)))) {
+        if (depthUploadBuffer_) {
             void* pData = nullptr;
-            if (SUCCEEDED(upBuf->Map(0, nullptr, &pData))) {
+            if (SUCCEEDED(depthUploadBuffer_->Map(0, nullptr, &pData))) {
                 float* dst = reinterpret_cast<float*>(pData);
                 for (UINT i = 0; i < (UINT)(totalBytes / sizeof(float)); ++i) {
                     dst[i] = 1.0f;
                 }
-                upBuf->Unmap(0, nullptr);
+                depthUploadBuffer_->Unmap(0, nullptr);
 
                 D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
                 dstLoc.pResource = dummyDepth_.Get();
@@ -281,13 +285,13 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
                 dstLoc.SubresourceIndex = 0;
 
                 D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
-                srcLoc.pResource = upBuf.Get();
+                srcLoc.pResource = depthUploadBuffer_.Get();
                 srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
                 srcLoc.PlacedFootprint = footprint;
 
                 TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
                 cmd->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);
-                TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+                TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
             }
         }
     }
@@ -473,3 +477,7 @@ void NeuralUpscaler::TransitionResource(ID3D12GraphicsCommandList* cmd, ID3D12Re
 }
 
 } // namespace fsrng
+
+
+
+

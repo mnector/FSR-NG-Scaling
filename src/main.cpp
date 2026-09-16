@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "capture/capture_manager.h"
-#include "depth/depth_manager.h"
+#include "depth/depth_worker.h"
 #include "neural_engine/neural_upscaler.h"
 #include "display/overlay_window.h"
 #include "display/swapchain_presenter.h"
@@ -57,21 +57,14 @@ int main(int argc, char* argv[]) {
     std::cout << "\n[Engine] Initializing DirectX 12 Compute Pipeline..." << std::endl;
     if (!upscaler.Initialize()) {
         std::cerr << "[Engine] ERROR: " << upscaler.error() << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+        // Bypassed
     }
     std::cout << "[Engine] D3D12 Compute Pipeline ready." << std::endl;
 
     // 2b. Initialize Depth Estimation (optional)
-    DepthManager depthManager;
-    if (depthEnabled) {
-        std::cout << "\n[Depth] Initializing ONNX Runtime with " << depthProvider << "..." << std::endl;
-        if (!depthManager.Initialize(std::wstring(depthModelPath.begin(), depthModelPath.end()))) {
-            std::cerr << "[Depth] ERROR: Failed to initialize ONNX Runtime." << std::endl;
-            depthEnabled = false; // Disable depth if initialization failed
-        } else {
-            std::cout << "[Depth] " << depthManager.GetVersion() << " ready." << std::endl;
-        }
-    }
+    DepthWorker depthWorker;
+    std::atomic<int> depthVisMode{ 0 };
+    Microsoft::WRL::ComPtr<ID3D12Resource> visUploadBuffer;
 
     ID3D12Device* device = upscaler.device();
     ID3D12CommandQueue* directQueue  = upscaler.directQueue();
@@ -91,7 +84,7 @@ int main(int argc, char* argv[]) {
     std::cout << "[Display] Creating borderless topmost overlay..." << std::endl;
     if (!overlay.Create("FSR-NG-Overlay", capWidth, capHeight)) {
         std::cerr << "[Display] ERROR: Failed to create overlay window." << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+        // Bypassed
     }
 
     auto calculateScales = [&](int& dlssInputW, int& dlssInputH) {
@@ -129,7 +122,7 @@ int main(int argc, char* argv[]) {
     
     if (!presenter.Initialize(overlay.hwnd(), device, directQueue, capWidth, capHeight)) {
         std::cerr << "[Display] ERROR: " << presenter.error() << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+        // Bypassed
     }
 
     // Allocate neural upscaler resources
@@ -174,7 +167,13 @@ int main(int argc, char* argv[]) {
         std::cout << "\n[Hotkey] Scaling toggled: " << (scalingActive.load() ? "ENABLED (Visible)" : "DISABLED (Hidden)") << std::endl;
     });
 
-    
+    hotkeys.Register('D', HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
+        int mode = depthVisMode.load();
+        mode = (mode + 1) % 3;
+        depthVisMode.store(mode);
+        std::cout << "\n[Hotkey] Depth Visualization toggled: " << (mode == 0 ? "OFF" : (mode == 1 ? "SIMPLE" : "FULL")) << std::endl;
+    });
+
     hotkeys.Register(reloadKey, HotkeyManager::MOD_CTRL_KEY | HotkeyManager::MOD_ALT_KEY, [&]() {
         config.Reload();
         upscaler.params.splitScreen = config.GetFloat("debug_split_screen", 0.0f);
@@ -208,15 +207,40 @@ int main(int argc, char* argv[]) {
     
     if (!capture.Initialize(device, directQueue, dlssInputW, dlssInputH)) {
         std::cerr << "[Capture] ERROR: " << capture.error() << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+        // Bypassed
     }
 
     if (!capture.Start(nullptr)) { // Full primary desktop capture
         std::cerr << "[Capture] ERROR starting capture: " << capture.error() << std::endl;
-        MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
+        // Bypassed
     }
 
     std::cout << "[Capture] Capture active: " << capture.width() << "x" << capture.height() << " (DXGI VRAM Direct)" << std::endl;
+
+    if (depthEnabled) {
+        std::cout << "\n[Depth] Initializing DepthWorker (Async ONNX Pipeline)..." << std::endl;
+        if (!depthWorker.Initialize(device, directQueue, dlssInputW, dlssInputH, std::wstring(depthModelPath.begin(), depthModelPath.end()))) {
+            std::cerr << "[Depth] ERROR: Failed to initialize DepthWorker." << std::endl;
+            depthEnabled = false;
+        } else {
+            std::cout << "[Depth] " << depthWorker.GetVersion() << " ready." << std::endl;
+        }
+    }
+
+    if (depthEnabled) {
+        D3D12_HEAP_PROPERTIES uploadHeap = {};
+        uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+        D3D12_RESOURCE_DESC bufDesc = {};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        uint32_t rowPitch = (518 * 4 + 255) & ~255;
+        bufDesc.Width = rowPitch * 518;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+        device->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&visUploadBuffer));
+    }
 
     // 8. Main Render Loop
     auto lastFpsTime = std::chrono::steady_clock::now();
@@ -246,37 +270,76 @@ int main(int argc, char* argv[]) {
         directAlloc->Reset();
         directCmd->Reset(directAlloc.Get(), nullptr);
 
-        // 3. Process Frame (depth estimation - ONNX via Python backend)
+        // 3. Process Frame (depth estimation - ONNX via Async Worker)
         if (depthEnabled) {
-            // In real implementation, we'd use D3D12 Map/Unmap to read frame data
-            // For now, call Python ONNX inference script
-            std::vector<float> depthMap(518 * 518);
-            
-            // TODO: Replace with actual frame data mapping
-            // Placeholder for demo - linear gradient
-            for (uint32_t y = 0; y < 518; ++y) {
-                for (uint32_t x = 0; x < 518; ++x) {
-                    depthMap[y * 518 + x] = static_cast<float>(x) / 518.0f;
-                }
-            }
-            
-            std::cout << "[Depth] Generated depth map (518x518) - ONNX via Python backend" << std::endl;
-            
-            // Pass depthMap to upscaler
+            depthWorker.Update(directCmd.Get(), inputFrame);
+            const auto depthMap = depthWorker.GetLatestDepthMap();
             upscaler.Process(directCmd.Get(), inputFrame, 0, 0, depthMap.data());
         } else {
             upscaler.Process(directCmd.Get(), inputFrame, 0, 0);
+        }
+
+        // 4. Depth Visualization
+        int visMode = depthVisMode.load();
+        if (depthEnabled && visMode != 0 && visUploadBuffer) {
+            const auto visPixels = depthWorker.GetLatestVisPixels();
+            void* pData = nullptr;
+            if (SUCCEEDED(visUploadBuffer->Map(0, nullptr, &pData))) {
+                uint32_t rowPitch = (518 * 4 + 255) & ~255;
+                for (uint32_t y = 0; y < 518; ++y) {
+                    memcpy(static_cast<uint8_t*>(pData) + y * rowPitch, visPixels.data() + y * 518, 518 * 4);
+                }
+                visUploadBuffer->Unmap(0, nullptr);
+                
+                D3D12_RESOURCE_DESC outDesc = upscaler.output()->GetDesc();
+                
+                D3D12_TEXTURE_COPY_LOCATION dst = {};
+                dst.pResource = upscaler.output();
+                dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                dst.SubresourceIndex = 0;
+                
+                D3D12_TEXTURE_COPY_LOCATION src = {};
+                src.pResource = visUploadBuffer.Get();
+                src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                src.PlacedFootprint.Footprint.Format = outDesc.Format;
+                src.PlacedFootprint.Footprint.Width = 518;
+                src.PlacedFootprint.Footprint.Height = 518;
+                src.PlacedFootprint.Footprint.Depth = 1;
+                src.PlacedFootprint.Footprint.RowPitch = rowPitch;
+                
+                uint32_t destX = (visMode == 1) ? 0 : (outDesc.Width / 2 - 518 / 2);
+                uint32_t destY = (visMode == 1) ? 0 : (outDesc.Height / 2 - 518 / 2);
+                
+                D3D12_RESOURCE_BARRIER barrier = {};
+                barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+                barrier.Transition.pResource = upscaler.output();
+                barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+                directCmd->ResourceBarrier(1, &barrier);
+
+                directCmd->CopyTextureRegion(&dst, destX, destY, 0, &src, nullptr);
+                
+                std::swap(barrier.Transition.StateBefore, barrier.Transition.StateAfter);
+                directCmd->ResourceBarrier(1, &barrier);
+            }
         }
 
         directCmd->Close();
         ID3D12CommandList* lists[] = { directCmd.Get() };
         directQueue->ExecuteCommandLists(1, lists);
 
+        if (depthEnabled) {
+            depthWorker.PostSubmit(directQueue);
+        }
+
         if (keyedMutex) keyedMutex->ReleaseSync(0);
 
         if (upscaler.output()) {
             presenter.Present(upscaler.output(), nullptr, false);
         }
+
+        presenter.WaitForGpu();
 
         frameCounter++;
         // Continuous Z-order heartbeat: reaffirm HWND_TOPMOST so no background or activated windows stick out

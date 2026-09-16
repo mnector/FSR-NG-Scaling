@@ -180,8 +180,9 @@ void DepthWorker::WorkerThread() {
             std::vector<uint32_t> vis(518 * 518);
             for (size_t i = 0; i < 518 * 518 && i < depthOut.size(); ++i) {
                 float d = depthOut[i];
-                // Clamp and convert to grayscale 0-255
-                uint8_t c = static_cast<uint8_t>(std::max(0.0f, std::min(1.0f, d)) * 255.0f);
+                // Visualization: human-intuitive (near = bright, far = dark)
+                // Since d is already 0=near, 1=far, we invert it for visualization only
+                uint8_t c = static_cast<uint8_t>(std::max(0.0f, std::min(1.0f, 1.0f - d)) * 255.0f);
                 // BGRA format: B=c, G=c, R=c, A=255
                 vis[i] = 0xFF000000 | (c << 16) | (c << 8) | c;
             }

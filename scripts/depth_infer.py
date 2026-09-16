@@ -75,10 +75,17 @@ def depth_inference(frame_path, output_path, model_path, provider="CPU"):
         depth = outputs[0][0]  # Remove batch dimension
         
         # Save depth (Depth Anything outputs disparity, so large = near. We want 1.0 = far, 0.0 = near)
-        depth_normalized = 1.0 - (depth / np.max(depth))
+        d_min = np.min(depth)
+        d_max = np.max(depth)
+        if d_max > d_min:
+            depth_norm = (depth - d_min) / (d_max - d_min)
+        else:
+            depth_norm = np.zeros_like(depth)
+            
+        depth_normalized = 1.0 - depth_norm
         depth_normalized.astype(np.float32).tofile(output_path)
         
-        return {"status": "ok", "shape": list(depth.shape), "range": [float(depth.min()), float(depth.max())]}
+        return {"status": "ok", "shape": list(depth.shape), "range": [float(d_min), float(d_max)]}
         
     except Exception as e:
         return {"status": "error", "message": str(e)}

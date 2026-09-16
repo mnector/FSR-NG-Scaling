@@ -314,7 +314,7 @@ int main(int argc, char* argv[]) {
                 barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
                 barrier.Transition.pResource = upscaler.output();
                 barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+                barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
                 barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
                 directCmd->ResourceBarrier(1, &barrier);
 

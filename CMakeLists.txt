@@ -22,6 +22,7 @@ endif()
 set(SOURCES
     src/main.cpp
     src/capture/capture_manager.cpp
+    src/depth/depth_manager.cpp
     
     src/neural_engine/neural_upscaler.cpp
     src/display/overlay_window.cpp

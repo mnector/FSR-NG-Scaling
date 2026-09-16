@@ -25,6 +25,7 @@ plugins/
 OptiScaler.ini
 releases/
 dlssnr_on_amd.ini
+models/
 
 # Pesos y modelos neuronales (evitar límites de GitHub y copyright)
 *.safetensors

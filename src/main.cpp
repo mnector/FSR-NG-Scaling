@@ -5,8 +5,10 @@
 #include <atomic>
 #include <iomanip>
 #include <algorithm>
+#include <vector>
 
 #include "capture/capture_manager.h"
+#include "depth/depth_manager.h"
 #include "neural_engine/neural_upscaler.h"
 #include "display/overlay_window.h"
 #include "display/swapchain_presenter.h"
@@ -43,8 +45,12 @@ int main(int argc, char* argv[]) {
     int toggleKey     = config.GetInt("toggle_key", 83); // 'S'
     int reloadKey     = config.GetInt("reload_key", 82); // 'R'
     int fpsLimit      = config.GetInt("fps_limit", 30);
+    bool depthEnabled = config.GetBool("depth/enabled", false);
+    std::string depthModelPath = config.GetString("depth/model_path", "models/depth/depth_anything_v2_vits.onnx");
+    std::string depthProvider = config.GetString("depth/provider", "ROCm");
 
-    std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << "" << std::endl;
+    std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << std::endl;
+    std::cout << "[Config] Depth Estimation: " << (depthEnabled ? "ON" : "OFF") << std::endl;
 
     // 2. Initialize Neural Upscaler (isolated D3D12 device & compute queue)
     NeuralUpscaler upscaler;
@@ -54,6 +60,18 @@ int main(int argc, char* argv[]) {
         MessageBoxA(nullptr, "Fatal Error. Please run from terminal to see the logs.", "FSR-NG Error", MB_ICONERROR); return 1;
     }
     std::cout << "[Engine] D3D12 Compute Pipeline ready." << std::endl;
+
+    // 2b. Initialize Depth Estimation (optional)
+    DepthManager depthManager;
+    if (depthEnabled) {
+        std::cout << "\n[Depth] Initializing ONNX Runtime with " << depthProvider << "..." << std::endl;
+        if (!depthManager.Initialize(std::wstring(depthModelPath.begin(), depthModelPath.end()))) {
+            std::cerr << "[Depth] ERROR: Failed to initialize ONNX Runtime." << std::endl;
+            depthEnabled = false; // Disable depth if initialization failed
+        } else {
+            std::cout << "[Depth] " << depthManager.GetVersion() << " ready." << std::endl;
+        }
+    }
 
     ID3D12Device* device = upscaler.device();
     ID3D12CommandQueue* directQueue  = upscaler.directQueue();
@@ -227,6 +245,16 @@ int main(int argc, char* argv[]) {
 
         directAlloc->Reset();
         directCmd->Reset(directAlloc.Get(), nullptr);
+
+        // 3. Process Frame
+        if (depthEnabled) {
+            // Extract RGB from frame (GPU memory -> CPU for ONNX)
+            // For now, use a placeholder: we need to map GPU resource to CPU-readable format
+            // This will be optimized when we integrate proper GPU->ONNX path
+            std::vector<float> depthMap;
+            depthManager.Process(nullptr, capture.width(), capture.height(), depthMap);
+            // TODO: Pass depthMap to upscaler.Process
+        }
 
         upscaler.Process(directCmd.Get(), inputFrame, 0, 0);
 

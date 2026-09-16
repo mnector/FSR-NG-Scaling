@@ -196,7 +196,7 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
 
     TransitionResource(cmd, outputResource_.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
 
-    // Upload real depth data from ONNX if provided
+    // Upload real depth data from ONNX if provided, otherwise initialize to far plane
     if (depthMap) {
         D3D12_RESOURCE_DESC td = dummyDepth_->GetDesc();
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
@@ -221,13 +221,57 @@ void NeuralUpscaler::Process(ID3D12GraphicsCommandList* cmd, ID3D12Resource* inp
             if (SUCCEEDED(upBuf->Map(0, nullptr, &pData))) {
                 // Copy depth data (518x518) to texture row by row
                 const float* src = depthMap;
-                for (UINT r = 0; r < numRows; ++r) {
+                for (UINT r = 0; r < numRows && r < td.Height; ++r) {
                     float* dst = reinterpret_cast<float*>(static_cast<BYTE*>(pData) + r * footprint.Footprint.RowPitch);
-                    for (UINT c = 0; c < td.Width; ++c) {
+                    for (UINT c = 0; c < td.Width && c < 518; ++c) {
                         // Clamp depth to [0.1, 1.0] for NGX
                         float d = src[r * 518 + c];
                         dst[c] = fmaxf(0.1f, fminf(1.0f, d));
                     }
+                }
+                upBuf->Unmap(0, nullptr);
+
+                D3D12_TEXTURE_COPY_LOCATION dstLoc = {};
+                dstLoc.pResource = dummyDepth_.Get();
+                dstLoc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+                dstLoc.SubresourceIndex = 0;
+
+                D3D12_TEXTURE_COPY_LOCATION srcLoc = {};
+                srcLoc.pResource = upBuf.Get();
+                srcLoc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+                srcLoc.PlacedFootprint = footprint;
+
+                TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_DEST);
+                cmd->CopyTextureRegion(&dstLoc, 0, 0, 0, &srcLoc, nullptr);
+                TransitionResource(cmd, dummyDepth_.Get(), D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+            }
+        }
+    } else {
+        // Depth to 1.0f (far plane) when not provided
+        D3D12_RESOURCE_DESC td = dummyDepth_->GetDesc();
+        D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint;
+        UINT numRows;
+        UINT64 rowSize, totalBytes;
+        device_->GetCopyableFootprints(&td, 0, 1, 0, &footprint, &numRows, &rowSize, &totalBytes);
+
+        D3D12_HEAP_PROPERTIES uploadHeap = {};
+        uploadHeap.Type = D3D12_HEAP_TYPE_UPLOAD;
+        D3D12_RESOURCE_DESC bufDesc = {};
+        bufDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+        bufDesc.Width = totalBytes;
+        bufDesc.Height = 1;
+        bufDesc.DepthOrArraySize = 1;
+        bufDesc.MipLevels = 1;
+        bufDesc.SampleDesc.Count = 1;
+        bufDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+        Microsoft::WRL::ComPtr<ID3D12Resource> upBuf;
+        if (SUCCEEDED(device_->CreateCommittedResource(&uploadHeap, D3D12_HEAP_FLAG_NONE, &bufDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr, IID_PPV_ARGS(&upBuf)))) {
+            void* pData = nullptr;
+            if (SUCCEEDED(upBuf->Map(0, nullptr, &pData))) {
+                float* dst = reinterpret_cast<float*>(pData);
+                for (UINT i = 0; i < (UINT)(totalBytes / sizeof(float)); ++i) {
+                    dst[i] = 1.0f;
                 }
                 upBuf->Unmap(0, nullptr);
 

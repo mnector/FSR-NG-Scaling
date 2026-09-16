@@ -177,8 +177,18 @@ void DepthWorker::WorkerThread() {
         }
 
         if (depthManager_.Process(floatInput.data(), width_, height_, depthOut)) {
+            std::vector<uint32_t> vis(518 * 518);
+            for (size_t i = 0; i < 518 * 518 && i < depthOut.size(); ++i) {
+                float d = depthOut[i];
+                // Clamp and convert to grayscale 0-255
+                uint8_t c = static_cast<uint8_t>(std::max(0.0f, std::min(1.0f, d)) * 255.0f);
+                // BGRA format: B=c, G=c, R=c, A=255
+                vis[i] = 0xFF000000 | (c << 16) | (c << 8) | c;
+            }
+
             std::lock_guard<std::mutex> lock(depthMutex_);
-            latestDepthMap_ = depthOut;
+            latestDepthMap_ = std::move(depthOut);
+            latestVisPixels_ = std::move(vis);
         }
 
         newFrameReady_ = false;

@@ -74,8 +74,8 @@ def depth_inference(frame_path, output_path, model_path, provider="CPU"):
         outputs = session.run(None, {session.get_inputs()[0].name: input_tensor})
         depth = outputs[0][0]  # Remove batch dimension
         
-        # Save depth (depth normalization: divide by max for [0,1] range)
-        depth_normalized = depth / np.max(depth)
+        # Save depth (Depth Anything outputs disparity, so large = near. We want 1.0 = far, 0.0 = near)
+        depth_normalized = 1.0 - (depth / np.max(depth))
         depth_normalized.astype(np.float32).tofile(output_path)
         
         return {"status": "ok", "shape": list(depth.shape), "range": [float(depth.min()), float(depth.max())]}

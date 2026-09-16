@@ -102,7 +102,7 @@ bool DepthManager::Process(const float* inputFrame, uint32_t width, uint32_t hei
     std::wstring framePath = L"temp_frame.bin";
     std::ofstream frameFile(framePath, std::ios::binary);
     if (!frameFile) return false;
-    frameFile.write(reinterpret_cast<char*>(inputRGB.data()), width * height * 3 * sizeof(float));
+    frameFile.write(reinterpret_cast<char*>(resizedRGB.data()), targetW * targetH * 3 * sizeof(float));
     frameFile.close();
 
     // Run Python inference

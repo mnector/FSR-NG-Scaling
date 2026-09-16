@@ -160,11 +160,11 @@ bool SwapchainPresenter::CreateBackbufferResources() {
 void SwapchainPresenter::WaitForGpu() {
     if (!queue_ || !fence_ || !fenceEvent_) return;
 
-    fenceValue_++;
-    queue_->Signal(fence_.Get(), fenceValue_);
+    currentFenceValue_++;
+    queue_->Signal(fence_.Get(), currentFenceValue_);
 
-    if (fence_->GetCompletedValue() < fenceValue_) {
-        fence_->SetEventOnCompletion(fenceValue_, fenceEvent_);
+    if (fence_->GetCompletedValue() < currentFenceValue_) {
+        fence_->SetEventOnCompletion(currentFenceValue_, fenceEvent_);
         WaitForSingleObject(fenceEvent_, INFINITE);
     }
 }
@@ -245,16 +245,30 @@ bool SwapchainPresenter::Present(ID3D12Resource* upscaledSource, std::function<v
     ID3D12CommandList* cmdLists[] = { cmdList_.Get() };
     queue_->ExecuteCommandLists(1, cmdLists);
 
-    // Present with VSync enabled (1, 0) to synchronize with monitor refresh rate
-    // and prevent GPU/CPU saturation from unbounded rendering loops
-    HRESULT hr = swapChain_->Present(1, 0);
+    // Present: If vsync is false, use tearing presentation for maximum unquantized framerate
+    UINT syncInterval = vsync ? 1 : 0;
+    UINT presentFlags = (syncInterval == 0) ? DXGI_PRESENT_ALLOW_TEARING : 0;
+
+    HRESULT hr = swapChain_->Present(syncInterval, presentFlags);
     if (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET) {
         error_ = "DXGI device removed/reset during present";
         return false;
     }
 
-    WaitForGpu();
+    // Signal fence for the buffer just presented
+    currentFenceValue_++;
+    queue_->Signal(fence_.Get(), currentFenceValue_);
+    fenceValues_[currentBufferIndex_] = currentFenceValue_;
+
+    // Advance to next buffer index
     currentBufferIndex_ = swapChain_->GetCurrentBackBufferIndex();
+
+    // Only wait if the incoming buffer is still in-flight on GPU
+    UINT64 nextBufferFence = fenceValues_[currentBufferIndex_];
+    if (nextBufferFence != 0 && fence_->GetCompletedValue() < nextBufferFence) {
+        fence_->SetEventOnCompletion(nextBufferFence, fenceEvent_);
+        WaitForSingleObject(fenceEvent_, INFINITE);
+    }
 
     return true;
 }

@@ -49,7 +49,8 @@ private:
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> cmdList_;
     Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
     HANDLE fenceEvent_ = nullptr;
-    UINT64 fenceValue_ = 0;
+    UINT64 fenceValues_[BufferCount]{};
+    UINT64 currentFenceValue_ = 0;
 
     int width_ = 0;
     int height_ = 0;

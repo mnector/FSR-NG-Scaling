@@ -208,28 +208,12 @@ int main(int argc, char* argv[]) {
     while (g_running.load()) {
         if (!overlay.ProcessMessages()) break;
 
-        // Auto-detect INSERT key to immediately unlock mouse for OptiScaler ImGui menu
-        static bool lastInsertState = false;
-        bool insertPressed = (GetAsyncKeyState(VK_INSERT) & 0x8000) != 0;
-        if (insertPressed && !lastInsertState) {
-            menuModeActive = !menuModeActive.load();
-            overlay.SetClickThrough(!menuModeActive.load());
-            if (menuModeActive.load()) {
-                if (!scalingActive.load()) {
-                    scalingActive = true;
-                    overlay.Show(true);
-                }
-                std::cout << "\n[Hotkey] INSERT: OptiScaler Menu opened -> Mouse UNLOCKED for GUI." << std::endl;
-            } else {
-                std::cout << "\n[Hotkey] INSERT: OptiScaler Menu closed -> Mouse click-through ENABLED." << std::endl;
-            }
-        }
-        lastInsertState = insertPressed;
-
         if (!scalingActive.load()) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
             continue;
         }
+
+        auto frameStart = std::chrono::steady_clock::now();
 
         bool newFrame = false;
         ID3D12Resource* inputFrame = capture.AcquireLatestFrame(&newFrame);
@@ -253,7 +237,7 @@ int main(int argc, char* argv[]) {
         if (keyedMutex) keyedMutex->ReleaseSync(0);
 
         if (upscaler.output()) {
-            presenter.Present(upscaler.output(), nullptr, true);
+            presenter.Present(upscaler.output(), nullptr, false);
         }
 
         frameCounter++;
@@ -273,7 +257,7 @@ int main(int argc, char* argv[]) {
         if (fpsLimit > 0) {
             float targetFrameTimeMs = 1000.0f / fpsLimit;
             auto frameEnd = std::chrono::steady_clock::now();
-            std::chrono::duration<float, std::milli> frameElapsed = frameEnd - now;
+            std::chrono::duration<float, std::milli> frameElapsed = frameEnd - frameStart;
             if (frameElapsed.count() < targetFrameTimeMs) {
                 int sleepTime = static_cast<int>(targetFrameTimeMs - frameElapsed.count());
                 if (sleepTime > 0) {

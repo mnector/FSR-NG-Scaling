@@ -54,8 +54,9 @@ static bool fileExists(const std::wstring& path) {
     return (_wstat(path.c_str(), &buffer) == 0);
 }
 
-bool DepthManager::Initialize(const std::wstring& modelPath) {
+bool DepthManager::Initialize(const std::wstring& modelPath, const std::wstring& provider) {
     modelPath_ = modelPath;
+    provider_ = provider;
 
     std::wcerr << L"[Depth] Checking file: " << modelPath << std::endl;
 
@@ -107,7 +108,7 @@ bool DepthManager::Process(const float* inputFrame, uint32_t width, uint32_t hei
 
     // Run Python inference
     std::wstring outputPath = L"temp_depth.bin";
-    std::wstring cmd = L"C:\\Users\\mnect\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe scripts/depth_infer.py temp_frame.bin temp_depth.bin";
+    std::wstring cmd = L"C:\\Users\\mnect\\AppData\\Local\\hermes\\hermes-agent\\venv\\Scripts\\python.exe scripts/depth_infer.py temp_frame.bin temp_depth.bin \"" + modelPath_ + L"\" " + provider_;
     int result = _wsystem(cmd.c_str());
     
     // Clean up temp frame

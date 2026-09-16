@@ -15,7 +15,7 @@ public:
     DepthWorker();
     ~DepthWorker();
 
-    bool Initialize(ID3D12Device* device, ID3D12CommandQueue* queue, uint32_t width, uint32_t height, const std::wstring& modelPath);
+    bool Initialize(ID3D12Device* device, ID3D12CommandQueue* queue, uint32_t width, uint32_t height, const std::wstring& modelPath, const std::wstring& provider);
     void Shutdown();
 
     // Call this every frame to queue a readback if idle

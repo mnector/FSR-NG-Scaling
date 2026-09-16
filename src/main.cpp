@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
     int fpsLimit      = config.GetInt("fps_limit", 30);
     bool depthEnabled = config.GetBool("enabled", false);
     std::string depthModelPath = config.GetString("model_path", "models/depth/depth_anything_v2_vits.onnx");
-    std::string depthProvider = config.GetString("provider", "ROCm");
+    std::string depthProvider = config.GetString("provider", "CUDA");
 
     std::cout << "[Config] Split Screen: " << (splitScreen > 0.5f ? "ON" : "OFF") << std::endl;
     std::cout << "[Config] Depth Estimation: " << (depthEnabled ? "ON" : "OFF") << std::endl;
@@ -219,7 +219,7 @@ int main(int argc, char* argv[]) {
 
     if (depthEnabled) {
         std::cout << "\n[Depth] Initializing DepthWorker (Async ONNX Pipeline)..." << std::endl;
-        if (!depthWorker.Initialize(device, directQueue, dlssInputW, dlssInputH, std::wstring(depthModelPath.begin(), depthModelPath.end()))) {
+        if (!depthWorker.Initialize(device, directQueue, dlssInputW, dlssInputH, std::wstring(depthModelPath.begin(), depthModelPath.end()), std::wstring(depthProvider.begin(), depthProvider.end()))) {
             std::cerr << "[Depth] ERROR: Failed to initialize DepthWorker." << std::endl;
             depthEnabled = false;
         } else {

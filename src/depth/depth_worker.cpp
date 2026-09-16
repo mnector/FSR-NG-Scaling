@@ -9,13 +9,13 @@ DepthWorker::~DepthWorker() {
     Shutdown();
 }
 
-bool DepthWorker::Initialize(ID3D12Device* device, ID3D12CommandQueue* queue, uint32_t width, uint32_t height, const std::wstring& modelPath) {
+bool DepthWorker::Initialize(ID3D12Device* device, ID3D12CommandQueue* queue, uint32_t width, uint32_t height, const std::wstring& modelPath, const std::wstring& provider) {
     device_ = device;
     queue_ = queue;
     width_ = width;
     height_ = height;
 
-    if (!depthManager_.Initialize(modelPath)) {
+    if (!depthManager_.Initialize(modelPath, provider)) {
         return false;
     }
 
